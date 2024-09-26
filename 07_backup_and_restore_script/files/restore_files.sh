@@ -65,6 +65,26 @@ ask_for_restore_dir_vbox() {
     fi
 }
 
+ask_for_restore_dir_utm() {
+    if [[ $(echo "$RESTORE_DIR_UTM") == "" ]] && [[ "$ASK_FOR_RESTORE_DIRS" != "no" ]]
+    then
+        if [[ "$RESTORE_UTM_FILES" == "yes" ]]
+        then
+            echo "please select restore directory for utm..."
+            RESTORE_DIR_UTM=$(sudo -H -u "$loggedInUser" osascript "$SCRIPT_DIR"/restore_ask_dir_utm.scpt 2> /dev/null | sed s'/\/$//')
+            sleep 0.5
+            osascript -e "tell application \"$SOURCE_APP_NAME\" to activate"
+            #osascript -e "tell application \"$SOURCE_APP_NAME.app\" to activate"
+            sleep 0.5
+            if [[ "$RESTORE_DIR_UTM" != "" ]]; then RESTORE_UTM="yes"; else :; fi
+        else
+            :
+        fi
+    else
+        :
+    fi
+}
+
 
 ###
 ### options
@@ -77,6 +97,7 @@ if [[ "$RUN_FROM_BATCH_SCRIPT" == "yes" ]]; then env_start_error_log; else :; fi
 
 ask_for_restore_dir_files
 ask_for_restore_dir_vbox
+ask_for_restore_dir_utm
 
 if [[ "$RESTORE_FILES_OPTION" == "ask_for_restore_directories" ]]
 then
@@ -100,13 +121,25 @@ then
     else
         :
     fi
+    sleep 3
+    if [[ "$RESTORE_DIR_UTM" != "" ]]
+    then
+        cp "$BACKUP_RESTORE_SCRIPTS_DIR"/unarchive/unarchive_tar_gz_progress_all_in_folder.command "$RESTORE_DIR_UTM"/
+        #"$RESTORE_DIR_VBOX"/unarchive_tar_gz_progress_all_in_folder.command &
+        open ""$RESTORE_DIR_UTM"/unarchive_tar_gz_progress_all_in_folder.command"
+    else
+        :
+    fi
     
     echo ''
     echo "waiting for unarchiving to finish..."
     sleep 3
     WAIT_PIDS=()
-    WAIT_PIDS+=$(ps aux | grep /unarchive_tar_gz_gpg_perms_progress_all_in_folder.command | grep -v grep | awk '{print $2;}')
-    WAIT_PIDS+=$(ps aux | grep /unarchive_tar_gz_progress_all_in_folder.command | grep -v grep | awk '{print $2;}')
+    WAIT_PIDS+=$(ps -A | grep -v grep | grep /unarchive_tar_gz_gpg_perms_progress_all_in_folder.command | awk '{print $1}')
+    WAIT_PIDS+=$(ps -A | grep -v grep | grep /unarchive_tar_gz_progress_all_in_folder.command | awk '{print $1}')
+    # older version gives waring during batch install "awk: newline in string [...]"
+    #WAIT_PIDS+=$(ps aux | grep /unarchive_tar_gz_gpg_perms_progress_all_in_folder.command | grep -v grep | awk '{print $2;}')
+    #WAIT_PIDS+=$(ps aux | grep /unarchive_tar_gz_progress_all_in_folder.command | grep -v grep | awk '{print $2;}')
     #echo "$WAIT_PIDS"
     #if [[ "$WAIT_PIDS" == "" ]]; then :; else lsof -p "$WAIT_PIDS" +r 1 &> /dev/null; fi
     while IFS= read -r line || [[ -n "$line" ]]; do if [[ "$line" == "" ]]; then continue; fi; lsof -p "$line" +r 1 &> /dev/null; done <<< "$(printf "%s\n" "${WAIT_PIDS[@]}")" 
@@ -145,6 +178,10 @@ env_activating_caffeinate
 #"/Users/"$USER"/vbox_dir_name/vbox_name"
 #)
 
+#BACKUPDIR_UTM=(
+#"/Users/"$USER"/Library/Containers/com.utmapp.UTM/Data/Documents/utm_box_name.utm"
+#)
+
 
 ### restore files function
 restore_files() {
@@ -181,7 +218,7 @@ restore_files() {
                 mv -f /"$RESTORE_TO_DIR"/"$BASENAME_LINE"/* "$line"/
         		#cp -a /"$RESTORE_TO_DIR"/"$BASENAME_LINE"/* "$line"/
         	else
-        		echo "source or destination does not exist, skipping..."
+        		echo "for "$line" source or destination does not exist, skipping..." >&2
         	fi
         fi
     	# cleaning up
@@ -218,6 +255,40 @@ else
     else
         :
     fi
+fi
+
+
+### restoring utm machines
+if [[ "$RESTORE_UTM" == "yes" ]]
+then
+    if [[ ! -L ~/Library/Containers/com.utmapp.UTM/Data/Documents ]]
+    then
+        echo "RESTORE_DIR_UTM is "$RESTORE_DIR_UTM"..."
+        if [[ $(echo "$RESTORE_DIR_UTM") == "" ]]
+        then
+            #echo ''
+            echo "restoredir for utm restore is empty, skipping..."
+            echo ''
+        else
+            #echo ''
+            echo "restoredir for utm restore is "$RESTORE_DIR_UTM"..."
+            echo ''
+            RESTORE_TO_DIR="$RESTORE_DIR_UTM"
+            unset RESTORE_DIRS
+            RESTORE_DIRS="$(printf "%s\n" "${BACKUPDIR_UTM[@]}")"
+            if [[ "$RESTORE_DIRS" != "" ]]
+            then
+                restore_files
+            else
+                :
+            fi
+        fi
+    else
+        :
+    fi
+    
+else
+    :
 fi
 
 

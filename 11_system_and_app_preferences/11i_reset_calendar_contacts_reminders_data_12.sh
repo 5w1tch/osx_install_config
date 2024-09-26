@@ -24,7 +24,7 @@ if [[ "$RUN_FROM_BATCH_SCRIPT" == "yes" ]]; then env_start_error_log; else :; fi
 ### compatibility
 ###
 
-# macos 11 only
+# specific macos version only
 if [[ "$MACOS_VERSION_MAJOR" != "12" ]]
 then
     echo ''
@@ -95,7 +95,7 @@ then
 		
 EOF
 		echo ''
-		sleep 2
+		sleep 3
 		
 		# without this there could be confusions when the system tries to sync while the files get deleted
 		# this would lead to multiple new entries in the reminders and the calendars app 
@@ -106,7 +106,7 @@ EOF
 		launchctl bootout gui/"$(id -u "$USER")"/com.apple.remindd 2>&1 | grep -v "in progress" | grep -v "No such process"
 		#launchctl kill 15 gui/"$(id -u "$USER")"/com.apple.CalendarAgent
 		#launchctl kill 15 gui/"$(id -u "$USER")"/com.apple.remindd
-		sleep 2
+		sleep 3
 		echo ''
 		
 		### identifying holidays calendar
@@ -287,7 +287,7 @@ EOF
 			launchctl bootout gui/"$(id -u "$USER")"/com.apple.remindd 2>&1 | grep -v "in progress" | grep -v "No such process"
 			#launchctl kill 15 gui/"$(id -u "$USER")"/com.apple.CalendarAgent
 			#launchctl kill 15 gui/"$(id -u "$USER")"/com.apple.remindd
-			sleep 2
+			sleep 5
 			#deleting_cache
 			#sleep 1
 			echo ''
@@ -297,7 +297,7 @@ EOF
 			launchctl bootstrap gui/"$(id -u "$USER")" /System/Library/LaunchAgents/com.apple.remindd.plist
 			#launchctl kickstart -k gui/"$(id -u "$USER")"/com.apple.CalendarAgent
 			#launchctl kickstart -k gui/"$(id -u "$USER")"/com.apple.remindd
-			sleep 2
+			sleep 3
 		}
 		restart_service
 		
@@ -439,7 +439,7 @@ EOF
 		opening_calendar
 		
 		waiting_and_quitting_calendar() {
-			WAITING_TIME=60
+			WAITING_TIME=90
 			NUM1=0
 			#echo ''
 			echo ''

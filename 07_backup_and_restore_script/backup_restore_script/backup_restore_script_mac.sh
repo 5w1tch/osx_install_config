@@ -61,6 +61,7 @@ unset_variables() {
     unset DESTINATION
     unset SUDOPASSWORD
     unset VBOXSAVEDIR
+    unset UTMSAVEDIR
     unset GUI_APP_TO_BACKUP
 }
 
@@ -140,6 +141,28 @@ install_update_dependency_apps() {
     else
         :
     fi
+    
+    ### utm backup app
+    #echo ''
+    echo "updating utm backup app..."    
+    APP_TO_INSTALL="utm_backup"
+    if [[ -e "$PATH_TO_APPS"/"$APP_TO_INSTALL".app ]]
+    then
+    	rm -rf "$PATH_TO_APPS"/"$APP_TO_INSTALL".app
+    else
+    	:
+    fi
+    cp -a "$WORKING_DIR"/utm_backup/"$APP_TO_INSTALL".app "$PATH_TO_APPS"/
+    chown $(id -u "$USER"):admin "$PATH_TO_APPS"/"$APP_TO_INSTALL".app
+    chown -R $(id -u "$USER"):admin "$PATH_TO_APPS"/"$APP_TO_INSTALL".app/Contents/custom_files/
+    chmod 755 "$PATH_TO_APPS"/"$APP_TO_INSTALL".app
+    chmod 770 "$PATH_TO_APPS"/"$APP_TO_INSTALL".app/Contents/custom_files/"$APP_TO_INSTALL".sh
+    if [[ $(xattr -l "$PATH_TO_APPS"/"$APP_TO_INSTALL".app | grep com.apple.quarantine) != "" ]]
+    then
+        xattr -d com.apple.quarantine "$PATH_TO_APPS"/"$APP_TO_INSTALL".app
+    else
+        :
+    fi
         
     ### installing / updating homebrew update script
     #echo ''
@@ -181,14 +204,15 @@ give_apps_security_permissions() {
     
     ### security permissions
 	APPS_SECURITY_ARRAY=(
-    # app name									security service										    allowed (1=yes, 0=no)
-	"Script Editor                              kTCCServiceAccessibility                             	    1"
-	"brew_casks_update                          kTCCServiceAccessibility                                    1"
-	"gui_apps_backup                            kTCCServiceAccessibility                             	    1"
-	"gui_apps_backup                            kTCCServiceReminders                             	        1"
-	"gui_apps_backup                            kTCCServiceAddressBook                             	        1"
-	"gui_apps_backup                            kTCCServiceCalendar                             	        1"
-	"virtualbox_backup                          kTCCServiceAccessibility                             	    1"
+    # app name									security service										allowed (1=yes, 0=no)
+	"Script Editor                              kTCCServiceAccessibility                             	1"
+	"brew_casks_update                          kTCCServiceAccessibility                                1"
+	"gui_apps_backup                            kTCCServiceAccessibility                             	1"
+	"gui_apps_backup                            kTCCServiceReminders                             	    1"
+	"gui_apps_backup                            kTCCServiceAddressBook                             	    1"
+	"gui_apps_backup                            kTCCServiceCalendar                             	    1"
+	"virtualbox_backup                          kTCCServiceAccessibility                             	1"
+	"utm_backup                                 kTCCServiceAccessibility                             	1"
 	)
 	PRINT_SECURITY_PERMISSIONS_ENTRIES="no" env_set_apps_security_permissions
     
@@ -197,24 +221,34 @@ give_apps_security_permissions() {
     # macos versions 10.14 and up
     # source app name							automated app name										allowed (1=yes, 0=no)
 	AUTOMATION_APPS=(
-	"$SOURCE_APP_NAME						System Events                   						1"
-	"$SOURCE_APP_NAME						Finder                   						        1"
+	"$SOURCE_APP_NAME						    System Events                   						1"
+	"$SOURCE_APP_NAME						    Finder                   						        1"
 	"gui_apps_backup							System Events                   						1"
 	"brew_casks_update							System Events                   						1"
 	"brew_casks_update							Terminal                   						        1"
 	"virtualbox_backup							System Events                   						1"
 	"virtualbox_backup							Terminal                   						        1"
+	"utm_backup							        System Events                   						1"
+	"utm_backup							        Terminal                   						        1"
 	)
 	PRINT_AUTOMATING_PERMISSIONS_ENTRIES="no" env_set_apps_automation_permissions
     
 }
 
 number_of_max_processes() {
-    NUMBER_OF_CORES=$(parallel --number-of-cores)
-    NUMBER_OF_MAX_JOBS=$(echo "$NUMBER_OF_CORES * 1.0" | bc -l)
-    #echo $NUMBER_OF_MAX_JOBS
-    NUMBER_OF_MAX_JOBS_ROUNDED=$(awk 'BEGIN { printf("%.0f\n", '"$NUMBER_OF_MAX_JOBS"'); }')
-    #echo $NUMBER_OF_MAX_JOBS_ROUNDED
+    if [[ $(brew list --formula | grep "^parallel$") == '' ]]
+	then
+		#echo parallel is NOT installed..."
+		#NUMBER_OF_MAX_JOBS_ROUNDED=1
+		:
+	else
+        NUMBER_OF_CORES=$(parallel --number-of-cores)
+        NUMBER_OF_MAX_JOBS=$(echo "$NUMBER_OF_CORES * 1.0" | bc -l)
+        #echo $NUMBER_OF_MAX_JOBS
+        NUMBER_OF_MAX_JOBS_ROUNDED=$(awk 'BEGIN { printf("%.0f\n", '"$NUMBER_OF_MAX_JOBS"'); }')
+        #echo $NUMBER_OF_MAX_JOBS_ROUNDED
+	fi
+
 }
 
 
@@ -612,6 +646,43 @@ backup_restore() {
                 :
             fi
             
+            # utm backup
+            if [[ "$BACKUP_UTM" == "no" ]]
+            then
+                :
+            elif [[ -e /Users/"$USER"/Library/Containers/com.utmapp.UTM/Data/Documents ]] || [[ "$BACKUP_UTM" == "yes" ]]
+            then
+                VARIABLE_TO_CHECK="$BACKUP_UTM"
+                QUESTION_TO_ASK="do you want to backup utm images (y/N)? "
+                env_ask_for_variable
+                BACKUP_UTM="$VARIABLE_TO_CHECK"
+                sleep 0.1
+                #
+                if [[ "$BACKUP_UTM" =~ ^(yes|y)$ ]]
+                then
+                    # opening applescript which will ask for saving location of compressed file
+                    echo "asking for directory to save the utm backup to..."
+                    UTMSAVEDIR=$(sudo -H -u "$loggedInUser" osascript "$WORKING_DIR"/utm_backup/ask_save_to_utm.scpt 2> /dev/null | sed s'/\/$//')
+                    sleep 0.5
+                    #echo ''
+                    # checking if valid path for backup was selected
+                    if [[ -e "$UTMSAVEDIR" ]]
+                    then
+                        echo "utm backup will be saved to "$UTMSAVEDIR""
+                        sleep 0.1
+                        #printf '\n'
+                        #sleep 0.1
+                    else
+                        echo "no valid path for saving the utm backup selected, exiting script..."
+                        exit
+                    fi
+                else
+                    :
+                fi
+            else
+                :
+            fi
+            
             # files backup
             VARIABLE_TO_CHECK="$FILES_BACKUP"
             QUESTION_TO_ASK="do you want to backup local files (y/N)? "
@@ -799,6 +870,19 @@ EOF
                     :
                 fi
             }
+            
+            run_utm_backup() {
+                # utm
+                if [[ "$BACKUP_UTM" =~ ^(yes|y)$ ]]
+                then
+                    if [[ "$RUN_WITH_NO_OUTPUT_ON_START" == "yes" ]]; then :; else echo "running utm backup..."; fi
+                    export UTMSAVEDIR
+                    #open "$WORKING_DIR"/utm_backup/utm_backup.app
+                    open "$PATH_TO_APPS"/utm_backup.app
+                else
+                    :
+                fi
+            }
         
             # backup destination
             DESTINATION="$HOMEFOLDER"/Desktop/backup_"$SELECTEDUSER"_"$DATE"
@@ -954,13 +1038,16 @@ EOF
             
                 ulimit -n 4096
                 
-                if [[ $(brew list --formula | grep "^parallel$") == '' ]]
+                if [[ $(sysctl hw.model | grep "iMac11,2") != "" ]] || [[ $(sysctl hw.model | grep "iMac12,1") != "" ]] || [[ $(sysctl hw.model | grep "iMac13,1") != "" ]]
             	then
-            		#echo parallel is NOT installed..."
             		backup_data_sequential
+            	elif command -v parallel &> /dev/null
+            	then
+            	    # installed
+            	    backup_data_parallel
             	else
-            		#echo parallel is installed..."
-            		backup_data_parallel
+            		# not installed
+            		backup_data_sequential
             	fi
                 
                 # resetting terminal settings or further input will not work
@@ -1011,8 +1098,11 @@ EOF
             	sleep 5
             	RUN_WITH_NO_OUTPUT_ON_START="yes"
             	run_files_backup
+            	if [[ "$FILES_BACKUP" =~ ^(yes|y)$ ]]; then sleep 15; else :; fi
             	run_vbox_backup
-            	if [[ "$FILES_BACKUP" =~ ^(yes|y)$ ]] || [[ "$BACKUP_VBOX" =~ ^(yes|y)$ ]]; then sleep 20; else :; fi
+            	if [[ "$BACKUP_VBOX" =~ ^(yes|y)$ ]]; then sleep 15; else :; fi
+            	run_utm_backup
+            	if [[ "$BACKUP_UTM" =~ ^(yes|y)$ ]]; then sleep 15; else :; fi
             	run_gui_backups
             	wait
             	#if [[ "$CALENDARS_BACKUP" =~ ^(yes|y)$ ]]; then env_collapsing_elements_in_calendar_sidebar; else :; fi
@@ -1024,6 +1114,7 @@ EOF
         	    #if [[ "$CALENDARS_BACKUP" =~ ^(yes|y)$ ]]; then env_collapsing_elements_in_calendar_sidebar; else :; fi
         	    run_files_backup
             	run_vbox_backup
+            	run_utm_backup
                 run_backup_data
         	}
         	#run_backups_with_gui_first
@@ -1035,10 +1126,17 @@ EOF
             
             if [[ "$BACKUP_VBOX" =~ ^(yes|y)$ ]]
             then
-                #while ps aux | grep /compress_and_move_vbox_backup.sh | grep -v grep > /dev/null; do sleep 1; done
-                # or
-                #WAIT_PIDS=$(ps -A | grep -m1 /compress_and_move_vbox_backup.sh | awk '{print $1}')
                 WAIT_PIDS=$(ps aux | grep /virtualbox_backup.sh | grep -v grep | awk '{print $2;}')
+                #echo "$WAIT_PIDS"
+                #if [[ "$WAIT_PIDS" == "" ]]; then :; else lsof -p "$WAIT_PIDS" +r 1 &> /dev/null; fi
+                while IFS= read -r line || [[ -n "$line" ]]; do if [[ "$line" == "" ]]; then continue; fi; lsof -p "$line" +r 1 &> /dev/null; done <<< "$(printf "%s\n" "${WAIT_PIDS[@]}")"            
+            else
+                :
+            fi
+            
+            if [[ "$BACKUP_UTM" =~ ^(yes|y)$ ]]
+            then
+                WAIT_PIDS=$(ps aux | grep /utm_backup.sh | grep -v grep | awk '{print $2;}')
                 #echo "$WAIT_PIDS"
                 #if [[ "$WAIT_PIDS" == "" ]]; then :; else lsof -p "$WAIT_PIDS" +r 1 &> /dev/null; fi
                 while IFS= read -r line || [[ -n "$line" ]]; do if [[ "$line" == "" ]]; then continue; fi; lsof -p "$line" +r 1 &> /dev/null; done <<< "$(printf "%s\n" "${WAIT_PIDS[@]}")"            
@@ -1113,7 +1211,7 @@ EOF
             ###
             
             # disabling siri analytics
-            # already done in system preferences script before but some apps seam to appear here later
+            # already done in system settings script before but some apps seam to appear here later
             for i in $(/usr/libexec/PlistBuddy -c "Print CSReceiverBundleIdentifierState" /Users/"$USER"/Library/Preferences/com.apple.corespotlightui.plist | grep " = " | sed -e 's/^[ \t]*//' | awk '{print $1}')
             do
                 #echo $i
@@ -1239,9 +1337,14 @@ EOF
             #sleep 0.1
             
             # stopping services and backing up files
-            sudo launchctl stop org.cups.cupsd
-        
+            STOP_CALENDAR_REMINDER_SERVICES="yes" STOP_ACCOUNTSD="yes" STOP_CUPSD="yes" env_stopping_services
+            echo ''
+            
+            
             ### running restore
+            echo "restoring..."
+            echo ''
+            
             BACKUP_RESTORE_LIST="$WORKING_DIR"/list/backup_restore_list.txt
             #STTY_ORIG=$(stty -g)
             #TERMINALWIDTH=$(echo $COLUMNS)
@@ -1447,10 +1550,13 @@ EOF
                 done <<< "$(cat "$BACKUP_RESTORE_LIST")"
             }
             
-            if command -v parallel &> /dev/null
+            if [[ $(sysctl hw.model | grep "iMac11,2") != "" ]] || [[ $(sysctl hw.model | grep "iMac12,1") != "" ]] || [[ $(sysctl hw.model | grep "iMac13,1") != "" ]]
         	then
-        		# installed
-        		restore_data_parallel
+        		restore_data_sequential
+        	elif command -v parallel &> /dev/null
+        	then
+        	    # installed
+        	    restore_data_parallel
         	else
         		# not installed
         		restore_data_sequential
@@ -1592,9 +1698,10 @@ EOF
             WHATSAPP_DIR="/Users/"$USER"/Library/Application Support/WhatsApp/"
             if [[ -e "$WHATSAPP_DIR" ]]
             then
-                find ""$WHATSAPP_DIR"/" -name "main-process.log*" -print0 | xargs -0 rm -rf
-                sudo rm -rf ""$WHATSAPP_DIR"/IndexedDB/"
-                sudo rm -rf ""$WHATSAPP_DIR"/WhatsApp/Cache/"
+                #:
+                #find ""$WHATSAPP_DIR"/" -name "main-process.log*" -print0 | xargs -0 rm -rf
+                #sudo rm -rf ""$WHATSAPP_DIR"/WhatsApp/Cache/"
+                sudo rm -rf "$WHATSAPP_DIR"
             else
                 :
             fi
@@ -1617,6 +1724,22 @@ EOF
             # signal
             if [[ -e "/Users/"$USER"/Library/Application Support/Signal/" ]]
             then
+                if [[ "$MACOS_CURRENTLY_BOOTED_VOLUME" == "macintosh_hd2" ]]
+                then
+                    # remove everything and start clean as of 2023-09 signal does not have a sync or backup/restore function for the signal desktop app
+                    # data is stored in
+                    # ~/Library/Application Support/Signal/sql/db.sqlite
+                    # access to database
+                    # sqlcipher ~"/Library/Application Support/Signal/sql/db.sqlite"
+                    # .tables results in file is not a database
+                    # decrypt database
+                    # PRAGMA key = "x'<key from config.json>'";
+                    # .tables (or other commands)
+                    rm -rf "/Users/"$USER"/Library/Application Support/Signal/"
+                else
+                    rm -rf "/Users/"$USER"/Library/Application Support/Signal/logs/"
+                fi
+                
                 #rm -rf "/Users/"$USER"/Library/Application Support/Signal/__update__"
                 #rm -rf "/Users/"$USER"/Library/Application Support/Signal/attachments.noindex"
                 #rm -rf "/Users/"$USER"/Library/Application Support/Signal/Cache/"
@@ -1630,14 +1753,15 @@ EOF
                 #
                 #rm -rf "/Users/"$USER"/Library/Application Support/Signal/"
                 #
-                find "/Users/"$USER"/Library/Application Support/Signal/" ! -name "sql" ! -name "config.json" ! -name "ephemeral.json" ! -name "attachments.noindex" -print0 -mindepth 1 -maxdepth 1 | xargs -0 rm -rf
+                #find "/Users/"$USER"/Library/Application Support/Signal/" ! -name "IndexedDB" ! -name "sql" ! -name "config.json" ! -name "ephemeral.json" ! -name "attachments.noindex" -print0 -mindepth 1 -maxdepth 1 | xargs -0 rm -rf
                 #
-                if [[ "$RUN_FROM_BATCH_SCRIPT" == "yes" ]]
-                then
-                    :
-                else
-                    osascript -e 'tell app "System Events" to display dialog "please unlink all devices from signal on ios before opening the macos desktop app..."' &
-                fi
+                # not needed if no files are deleted above
+                #if [[ "$RUN_FROM_BATCH_SCRIPT" == "yes" ]]
+                #then
+                #    :
+                #else
+                #    osascript -e 'tell app "System Events" to display dialog "please unlink all devices from signal on ios before opening the macos desktop app..."' &
+                #fi
             else
                 :
             fi
@@ -1647,8 +1771,40 @@ EOF
             # post restore operations
             echo ''
             echo "running post restore operations..."
-            sudo launchctl start org.cups.cupsd
+            
+            # update services menu entries in all apps
             /System/Library/CoreServices/pbs -flush
+            
+            # enabling services
+            START_ACCOUNTSD="yes" START_CUPSD="yes" env_starting_services
+            # accountsd needs to run before re-enabling the calendar services in order for all calendars to appear
+            # env_starting_services includes an additional a 5s waiting time
+            sleep 5
+            START_CALENDAR_REMINDER_SERVICES="yes" env_starting_services
+            # giving macos time to convert calendars to new format
+            if [[ "$MACOS_VERSION_MAJOR" == "13" ]]
+            then
+                WAITING_TIME=60
+            	NUM1=0
+            	#echo ''
+            	echo ''
+            	while [[ "$NUM1" -le "$WAITING_TIME" ]]
+            	do 
+            		NUM1=$((NUM1+1))
+            		if [[ "$NUM1" -le "$WAITING_TIME" ]]
+            		then
+            			#echo "$NUM1"
+            			sleep 1
+            			tput cuu 1 && tput el
+            			echo "waiting $((WAITING_TIME-NUM1)) to give macos time to convert calendars to new format..."
+            		else
+            			:
+            		fi
+            	done
+            else
+                :
+            fi
+            echo ''
             
             ### casks install
             if [[ "$INSTALL_CASKS" =~ ^(yes|y)$ ]]

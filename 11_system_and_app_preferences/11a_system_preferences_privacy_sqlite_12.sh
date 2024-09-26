@@ -24,7 +24,7 @@ if [[ "$RUN_FROM_BATCH_SCRIPT" == "yes" ]]; then env_start_error_log; else :; fi
 ### compatibility
 ###
 
-# macos 10.15 only
+# specific macos version only
 if [[ "$MACOS_VERSION_MAJOR" != "12" ]]
 then
     echo ''
@@ -295,6 +295,8 @@ ACCESSIBILITYAPPS=(
 "Unified Remote                                                      kTCCServiceAccessibility           1"
 "TeamViewer                                                          kTCCServiceAccessibility           1"
 "UI Browser                                                          kTCCServiceAccessibility           1"
+"run_on_login_virusscannerplus                                       kTCCServiceAccessibility           1"
+"BetterTouchTool                                                     kTCCServiceAccessibility           1"
 )
 
 APPS_SECURITY_ARRAY=$(printf "%s\n" "${ACCESSIBILITYAPPS[@]}")
@@ -311,7 +313,7 @@ sqlite3 "$DATABASE_USER" "delete from access where service='kTCCServiceAddressBo
 CONTACTSAPPS=(
 # app name									security service										    allowed (1=yes, 0=no)
 "gui_apps_backup                            kTCCServiceAddressBook                                      1"
-"Alfred 4                                   kTCCServiceAddressBook                                      1"
+"Alfred 5                                   kTCCServiceAddressBook                                      1"
 "GeburtstagsChecker                         kTCCServiceAddressBook                                      1"
 "Telephone                                  kTCCServiceAddressBook                                      1"
 )
@@ -449,6 +451,22 @@ APPS_SECURITY_ARRAY=$(printf "%s\n" "${DEVELOPER_TOOLS_APPS[@]}")
 PRINT_SECURITY_PERMISSIONS_ENTRIES="yes" env_set_apps_security_permissions
 
 
+### privacy - bluetooth
+
+echo ''
+tput bold; echo "bluetooth..." ; tput sgr0
+
+sqlite3 "$DATABASE_USER" "delete from access where service='kTCCServiceBluetoothAlways';"
+
+MICROPHONEAPPS=(
+# app name								    security service										    allowed (1=yes, 0=no)
+"Stats                                      kTCCServiceBluetoothAlways                                  0"
+)
+
+APPS_SECURITY_ARRAY=$(printf "%s\n" "${MICROPHONEAPPS[@]}")
+PRINT_SECURITY_PERMISSIONS_ENTRIES="yes" env_set_apps_security_permissions
+
+
 ### privacy - automation
 # does not show in system preferences window, but works
 
@@ -481,14 +499,17 @@ AUTOMATION_APPS=(
 "virtualbox_backup                                                          Terminal                    1"
 "run_on_login_signal                                                        System Events               1"
 "run_on_login_whatsapp                                                      System Events               1"
+"run_on_login_virusscannerplus                                              System Events               1"
 "run_on_login_reminders                                                     System Events               1"
 "iTerm                                                                      System Events               1"
-"XtraFinder                                                                 Finder                      1"
-"TotalFinder                                                                Finder                      1"
+#"XtraFinder                                                                 Finder                      1"
+#"TotalFinder                                                                Finder                      1"
 "EagleFiler                                                                 Mail                        1"
 "EagleFiler                                                                 Finder                      1"
 "witchdaemon                                                                Mail                        0"
 "Linphone                                                                   System Events               1"
+"BetterTouchTool                                                            Shortcuts                   1"
+"BetterTouchTool                                                            Shortcuts Events            1"
 )
         
 PRINT_AUTOMATING_PERMISSIONS_ENTRIES="yes" env_set_apps_automation_permissions

@@ -102,7 +102,7 @@ install_casks_parallel() {
     if [[ $(brew list --cask | grep "^$i$") == "" ]]
     then
         echo "installing cask "$i"..."
-        env_use_password | env_timeout 400 brew install --cask --force "$i" 2> /dev/null | grep "successfully installed"
+        env_use_password | env_timeout 600 brew install --cask --force "$i" 2> /dev/null | grep "successfully installed"
         if [[ $? -eq 0 ]]
         then
             # successfull
@@ -113,7 +113,7 @@ install_casks_parallel() {
             if [[ "$SECOND_TRY" == "yes" ]]
             then
                 # do nothing if it already is the second try
-                :
+                echo "installing cask $i failed for the second time..." >&2
             else
                 if [[ -e /tmp/casks_second_try.txt ]]; then :; else touch /tmp/casks_second_try.txt; fi
                 echo "installing cask $i failed, noting for a second try..." >&2
@@ -158,12 +158,12 @@ install_casks_parallel() {
                 # waiting for libreoffice to be detectable by language pack
                 sleep 120
                 # installung libreoffice language pack
-                LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK=$(ls -1 /usr/local/Caskroom/libreoffice-language-pack | sort -V | head -n 1)
-                PATH_TO_FIRST_RUN_APP="/usr/local/Caskroom/libreoffice-language-pack/$LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK/LibreOffice Language Pack.app"
+                LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK=$(ls -1 "$BREW_PATH_PREFIX"/Caskroom/libreoffice-language-pack | sort -V | head -n 1)
+                PATH_TO_FIRST_RUN_APP=""$BREW_PATH_PREFIX"/Caskroom/libreoffice-language-pack/$LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK/LibreOffice Language Pack.app"
                 env_set_open_on_first_run_permissions
                 PATH_TO_FIRST_RUN_APP=""$PATH_TO_APPS"/LibreOffice.app"
                 env_set_open_on_first_run_permissions
-                open "/usr/local/Caskroom/libreoffice-language-pack/$LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK/LibreOffice Language Pack.app" &
+                open ""$BREW_PATH_PREFIX"/Caskroom/libreoffice-language-pack/$LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK/LibreOffice Language Pack.app" &
                 sleep 2
                 env_active_source_app
             fi
@@ -226,6 +226,7 @@ install_casks_parallel() {
 ###
 
 checking_homebrew
+BREW_PATH_PREFIX=$(brew --prefix)
 env_homebrew_update
 
 
@@ -255,19 +256,19 @@ then
         :
     else
         VARIABLE_TO_CHECK="$CONT_CASKROOM"
-        QUESTION_TO_ASK="$(echo -e 'found a backup of cask specifications in /tmp/Caskroom \ndo you wanto to restore /tmp/Caskroom/* to /usr/local/Caskroom/' '(Y/n)? ')"
+        QUESTION_TO_ASK="$(echo -e 'found a backup of cask specifications in /tmp/Caskroom \ndo you wanto to restore /tmp/Caskroom/* to $(brew --prefix)/Caskroom/' '(Y/n)? ')"
         env_ask_for_variable
         CONT_CASKROOM="$VARIABLE_TO_CHECK"
         
         if [[ "$CONT_CASKROOM" =~ ^(yes|y)$ ]]
         then
             #echo ''
-            echo "restoring /tmp/Caskroom/. to /usr/local/Caskroom/..."
-            if [[ -e "/usr/local/Caskroom" ]]
+            echo "restoring /tmp/Caskroom/. to "$BREW_PATH_PREFIX"/Caskroom/..."
+            if [[ -e ""$BREW_PATH_PREFIX"/Caskroom" ]]
             then
-                cp -a /tmp/Caskroom/. /usr/local/Caskroom/
+                cp -a /tmp/Caskroom/. "$BREW_PATH_PREFIX"/Caskroom/
             else
-                echo "/usr/local/Caskroom/ not found, skipping restore..."
+                echo ""$BREW_PATH_PREFIX"/Caskroom/ not found, skipping restore..."
             fi
         else
             :
@@ -562,8 +563,8 @@ then
         #       reset PRAM by rebooting and pressing cmd+option+P+R (release after second time chime or logo comes up)
         #       boot into macOS and uninstall and reinstall virtualbox and extension pack and macfuse
         #           brew reinstall --cask--force virtualbox virtualbox-extension-pack macfuse
-        #       open system preferences - security - general and accept extension
-        #       open system preferences - sound and disable startup chime (if wanted)
+        #       open system settings - security - general and accept extension
+        #       open system settings - sound and disable startup chime (if wanted)
         #       reboot if needed
         #       boot into recovery (cmd + R)
         #           disable sip (if wanted)
@@ -761,6 +762,28 @@ allow_opening_casks() {
         local APP_NAME="$CASK_ARTIFACT_APP_NO_EXTENSION"
         #echo "$APP_NAME"
         env_set_open_on_first_run_permissions
+        # allow additional apps inside of other apps
+        if [[ "$line" == "bettertouchtool" ]]
+        then
+            local APP_NAME="BTTRelaunch"
+            env_set_open_on_first_run_permissions
+        else
+            :
+        fi
+        if [[ "$line" == "alfred" ]]
+        then
+            local APP_NAME="Alfred Preferences"
+            env_set_open_on_first_run_permissions
+        else
+            :
+        fi
+        if [[ "$line" == "bartender" ]]
+        then
+            local APP_NAME="BartenderStartAtLoginHelper"
+            env_set_open_on_first_run_permissions
+        else
+            :
+        fi
     else
         :
     fi
@@ -792,6 +815,21 @@ else
             local APP_NAME="$CASK_ARTIFACT_APP_NO_EXTENSION"
             #echo "$APP_NAME"
             env_set_open_on_first_run_permissions
+            # allow additional apps inside of other apps
+            if [[ "$line" == "bettertouchtool" ]]
+            then
+                local APP_NAME="BTTRelaunch"
+                env_set_open_on_first_run_permissions
+            else
+                :
+            fi
+            if [[ "$line" == "alfred" ]]
+            then
+                local APP_NAME="Alfred Preferences"
+                env_set_open_on_first_run_permissions
+            else
+                :
+            fi
         else
             :
         fi

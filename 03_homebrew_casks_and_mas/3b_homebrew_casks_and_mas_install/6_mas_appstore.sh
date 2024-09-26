@@ -118,10 +118,17 @@ env_check_if_parallel_is_installed
 ### accepting privacy policy
 defaults write ~/Library/Preferences/com.apple.AppStore.plist ASAcknowledgedOnboardingVersion -int 1
 
+### setting notifications
+APPLICATIONS_TO_SET_NOTIFICATIONS=(
+"App Store																41943375"
+)
+SET_APPS_NOTIFICATIONS="yes" env_set_check_apps_notifications
+CHECK_APPS_NOTIFICATIONS="yes" env_set_check_apps_notifications
+sleep 1
+echo ''
+
+
 ### mas login
-
-
-
 mas_login() {
     
     mas signout
@@ -208,18 +215,22 @@ mas_login_applescript() {
     
     	osascript <<EOF
         tell application "App Store"
-            try
-        	    activate
-        	    delay 5
-        	end try
+            launch
+            delay 5
+            #activate
+            #delay 2
         end tell
+        
+        ## do not use visible as it makes the window un-clickable
+        #tell application "System Events" to tell process "App Store" to set visible to true
+    	#delay 1
+    	tell application "System Events" to tell process "App Store" to set frontmost to true
+    	delay 2
     
         tell application "System Events"
         	tell process "App Store"
-        		set frontmost to true
-        		delay 2
         		### on first run when installing the appstore asks for accepting privacy policy
-        		# to reset delete ASAcknowledgedOnboardingVersion from ~/Library/Preferences/com.apple.AppStore.plist
+        		# to reset delete ASAcknowledgedOnboardingVersion from ~/Library/Preferences/com.apple.AppStore.plist and reboot
         		try
         		   if "$MACOS_VERSION_MAJOR" is equal to "10.14" then
             		    click button 2 of UI element 1 of sheet 1 of window 1
@@ -232,8 +243,12 @@ mas_login_applescript() {
                     if "$MACOS_VERSION_MAJOR" greater than or equal to "11" then
             		    click button 2 of UI element 1 of sheet 1 of window "App Store" 
                     end if
-    			    delay 3
     		    end try
+                delay 8
+                
+    		    ### on clean install on first run the appstore asks for enabling notifications
+    		    # set before login by adding preferences for app store for notification center
+    		    
     		    ### login
     		    if "$MACOS_VERSION_MAJOR" is equal to "10.14" then
         		    click menu item 15 of menu "Store" of menu bar item "Store" of menu bar 1
@@ -259,18 +274,18 @@ mas_login_applescript() {
         		        set focused of text field 1 of sheet 1 of sheet 1 of window "App Store" to true
         		    end try
                 end if
-        		delay 2
+        		delay 3
         		tell application "System Events" to keystroke "$MAS_APPLE_ID"
-        		delay 2
+        		delay 3
         		tell application "System Events" to keystroke return
-        		delay 2
+        		delay 3
         		tell application "System Events" to keystroke "$MAS_APPSTORE_PASSWORD"
-        		delay 2
+        		delay 3
         		tell application "System Events" to keystroke return
         		# leave two factor auth disabled if disabled before
                 if "$MACOS_VERSION_MAJOR" greater than or equal to "11" then
             		try
-            		    delay 12
+            		    delay 15
             		    try
             		        # german
             		        click button "Weitere Optionen" of group 6 of group 1 of UI element 1 of scroll area 1 of sheet 1 of sheet 1 of window "App Store"
@@ -278,7 +293,7 @@ mas_login_applescript() {
             		        # universal
             		        click button 1 of group 6 of group 1 of UI element 1 of scroll area 1 of sheet 1 of sheet 1 of window "App Store"
             		    end try
-            		    delay 5
+            		    delay 8
             		    try
             		        # german
             		        click button "Nicht aktualisieren" of sheet 1 of sheet 1 of window "App Store" 
@@ -286,7 +301,7 @@ mas_login_applescript() {
             		        # universal
             		        click button 1 of sheet 1 of sheet 1 of window "App Store" 
             		    end try
-                        delay 5
+                        delay 8
                     end try
                 end if
         	end tell
@@ -346,7 +361,7 @@ install_mas_apps() {
 	#echo $MAS_NUMBER
 	MAS_NAME=$(echo "$i" | awk '{gsub("\t","  ",$0); print;}' | awk -F ' \{2,\}' '{print $2}' | sed 's/^[[:space:]]*//g' | sed -e 's/[[:space:]]*$//g')
 	#echo $MAS_NAME
-    if [[ $(find "$PATH_TO_APPS" -path '*Contents/_MASReceipt/receipt' -maxdepth 4 -print0 | sed 's#.app/Contents/_MASReceipt/receipt#.app#g; s#/Applications/##' | xargs -0 basename | grep "$MAS_NAME") == "" ]]
+    if [[ $(find "$PATH_TO_APPS" -path '*Contents/_MASReceipt/receipt' -maxdepth 4 -print | sed 's#.app/Contents/_MASReceipt/receipt#.app#g; s#/Applications/##' | rev | cut -s -f 1 -d '/' | rev | grep "$MAS_NAME") == "" ]]
     then
         echo installing app "$MAS_NAME"...
         mas install --force "$MAS_NUMBER" | grep "Installed"

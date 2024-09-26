@@ -1,10 +1,10 @@
 ### casks with long install times first
 xquartz
-adoptopenjdk
+temurin		   		# jdk from the eclipse foundation (adoptium), official successor of adoptopenjdk
 macfuse
-#virtualbox         # is installed as a dependency of virtualbox-extension-pack
-virtualbox-extension-pack
-#libreoffice        # is installed as a dependency of libreoffice-language-pack
+#virtualbox         		# is installed as a dependency of virtualbox-extension-pack
+#virtualbox-extension-pack	# using utm now
+#libreoffice        		# is installed as a dependency of libreoffice-language-pack
 libreoffice-language-pack
 
 ### alphabetical
@@ -15,6 +15,7 @@ angry-ip-scanner
 appcleaner
 bartender
 bbedit
+bettertouchtool
 brackets
 burn
 coconutbattery
@@ -24,6 +25,7 @@ cyberduck
 disk-inventory-x
 eaglefiler
 easyfind
+eloston-chromium
 #flash-npapi
 firefox
 geburtstagschecker
@@ -55,23 +57,27 @@ onyx
 openwebstart
 photosync
 prefs-editor
-profilecreator
+#profilecreator
 progressive-downloader
 quickhash
-quicksilver
+#quicksilver
 sejda-pdf
 signal
-skype
+#skype
+stats
 teamviewer
 textmate
 the-archive-browser
 the-unarchiver
+timer
 tnefs-enough
-ui-browser
+#ui-browser
 unified-remote
+utm
 veracrypt
+visual-studio-code
 vlc
-vlc-webplugin
+#vlc-webplugin
 vnc-viewer
 vox			# alternative: tiny-player
 whatsapp
@@ -81,4 +87,4 @@ xnconvert
 # no longer installable by cask, installed with separate install script
 # correct name in uppercase and lowercase letters is needed
 #XtraFinder
-TotalFinder
+#TotalFinder

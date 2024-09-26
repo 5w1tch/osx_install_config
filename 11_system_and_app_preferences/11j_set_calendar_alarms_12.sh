@@ -24,7 +24,7 @@ if [[ "$RUN_FROM_BATCH_SCRIPT" == "yes" ]]; then env_start_error_log; else :; fi
 ### compatibility
 ###
 
-# macos 11 only
+# specific macos version only
 if [[ "$MACOS_VERSION_MAJOR" != "12" ]]
 then
     echo ''
@@ -281,7 +281,7 @@ EOF
 		# if kill is used to stop the service kickstart is needed to restart it, bootstrap will not work
 		launchctl bootout gui/"$(id -u "$USER")"/com.apple.CalendarAgent 2>&1 | grep -v "in progress" | grep -v "No such process"
 		#launchctl kill 15 gui/"$(id -u "$USER")"/com.apple.CalendarAgent
-		sleep 2
+		sleep 5
 		# without this the changes will not take effect
 		deleting_cache
 		sleep 1
@@ -290,7 +290,7 @@ EOF
 		# if kill was used to stop the service kickstart is needed to restart it, bootstrap will not work
 		launchctl bootstrap gui/"$(id -u "$USER")" /System/Library/LaunchAgents/com.apple.CalendarAgent.plist
 		#launchctl kickstart -k gui/"$(id -u "$USER")"/com.apple.CalendarAgent
-		sleep 2
+		sleep 3
 	}
 	restart_service
 	

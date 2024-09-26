@@ -28,7 +28,11 @@ SCRIPT_INSTALL_NAME=screen_resolution
 ### functions
 wait_for_loggedinuser() {
     ### waiting for logged in user
-    loggedInUser=$(/usr/bin/python -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+    # recommended way, but it seems apple deprecated python2 in macOS 12.3.0
+    # to keep on using the python command, a python package is needed
+    #pip3 install pyobjc-framework-SystemConfiguration
+    #loggedInUser=$(python3 -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+    loggedInUser=$(scutil <<< "show State:/Users/ConsoleUser" | awk '/Name :/ && ! /loginwindow/ { print $3 }')
     NUM=0
     MAX_NUM=30
     SLEEP_TIME=3
@@ -37,7 +41,11 @@ wait_for_loggedinuser() {
     do
         sleep "$SLEEP_TIME"
         NUM=$((NUM+1))
-        loggedInUser=$(/usr/bin/python -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+        # recommended way, but it seems apple deprecated python2 in macOS 12.3.0
+        # to keep on using the python command, a python package is needed
+        #pip3 install pyobjc-framework-SystemConfiguration
+        #loggedInUser=$(python3 -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+        loggedInUser=$(scutil <<< "show State:/Users/ConsoleUser" | awk '/Name :/ && ! /loginwindow/ { print $3 }')
     done
     #echo ''
     #echo "NUM is $NUM..."
@@ -150,59 +158,79 @@ check_homebrew_and_python_versions() {
         exit
     fi
     
-    # homebrew python versions
+    ### checking python versions
     # homebrew python2
     #if [[ $(sudo -H -u "$loggedInUser" brew list --formula | grep "^python@2$") == '' ]]
-    if sudo -H -u "$loggedInUser" command -v python2 | grep $(sudo -H -u "$loggedInUser" brew --prefix) &> /dev/null
+    #if sudo -H -u "$loggedInUser" which -a python2 | grep $(sudo -H -u "$loggedInUser" brew --prefix) &> /dev/null
+    if sudo -H -u "$loggedInUser" command -v $(sudo -H -u "$loggedInUser" brew --prefix)/bin/python2 &> /dev/null
     then
         echo "python2 is installed via homebrew..."
         PYTHON2_HOMEBREW_INSTALLED="yes"
+        PYTHON2_VERSION=$($(sudo -H -u "$loggedInUser" brew --prefix)/bin/python2 --version 2>&1)
     else
         echo "python2 is not installed via homebrew..."
         PYTHON2_HOMEBREW_INSTALLED="no"
     fi
     # homebrew python3
     #if [[ $(sudo -H -u "$loggedInUser" brew list --formula | grep "^python$") == '' ]]
-    if sudo -H -u "$loggedInUser" command -v python3 | grep $(sudo -H -u "$loggedInUser" brew --prefix) &> /dev/null
+    #if sudo -H -u "$loggedInUser" which -a python3 | grep $(sudo -H -u "$loggedInUser" brew --prefix) &> /dev/null
+    if sudo -H -u "$loggedInUser" command -v $(sudo -H -u "$loggedInUser" brew --prefix)/bin/python3 &> /dev/null
     then
         echo "python3 is installed via homebrew..."
         PYTHON3_HOMEBREW_INSTALLED="yes"
+        PYTHON3_VERSION=$($(sudo -H -u "$loggedInUser" brew --prefix)/bin/python3 --version 2>&1)
     else
         echo "python3 is not installed via homebrew..."
         PYTHON3_HOMEBREW_INSTALLED="no"
     fi
+    # apple python
+    #if sudo -H -u "$loggedInUser" which -a python3 | grep "/usr/bin" &> /dev/null
+    if sudo -H -u "$loggedInUser" command -v /usr/bin/python3 &> /dev/null
+    then
+        echo "apple python is installed..."
+        APPLE_PYTHON_VERSION_INSTALLED="yes"
+        APPLE_PYTHON_VERSION=$(/usr/bin/python3 --version 2>&1)
+    else
+        echo "apple python is not installed..."
+        APPLE_PYTHON_VERSION_INSTALLED="no"
+    fi
+    
 
-    # listing installed python versions
+    ### listing installed python versions
     echo ''
     echo "installed python versions..."
-    APPLE_PYTHON_VERSION=$(python --version 2>&1)
-    printf "%-15s %-20s %-15s\n" "python" "$APPLE_PYTHON_VERSION" "apple"
+    if [[ $APPLE_PYTHON_VERSION_INSTALLED == "yes" ]]
+    then
+        printf "%-20s %-25s\n" "$APPLE_PYTHON_VERSION" "apple"
+    else
+        :
+    fi
     if [[ $PYTHON2_HOMEBREW_INSTALLED == "yes" ]]
     then
-        PYTHON2_VERSION=$(python2 --version 2>&1)
-        printf "%-15s %-20s %-15s\n" "python2" "$PYTHON2_VERSION" "homebrew"
+        printf "%-20s %-25s\n" "$PYTHON2_VERSION" "homebrew"
     else
         :
     fi
     if [[ $PYTHON3_HOMEBREW_INSTALLED == "yes" ]]
     then
-        PYTHON3_VERSION=$(python3 --version 2>&1)
-        printf "%-15s %-20s %-15s\n" "python3" "$PYTHON3_VERSION" "homebrew"
+        printf "%-20s %-25s\n" "$PYTHON3_VERSION" "homebrew"
     else
         :
     fi
     
-    # the project is python3 only (from 2018-09), so make sure python3 is used
+    
+    ### the project is python3 only (from 2018-09), so make sure python3 is used
     # python2 deprecated 2020-01, only use python3
-    # macos sip limits installing pip and installing/updating python modules - as a consequence only support homebrew python3
+    # macos sip limits installing pip and installing/updating python packages - as a consequence only support homebrew python3
     echo ''
     if [[ "$PYTHON3_HOMEBREW_INSTALLED" == "yes" ]]
     then
         # installed
         # should be enough to use python3 here as $PYTHON3_INSTALLED checks if it is installed via homebrew
-        PYTHON_VERSION='python3'
-        PIP_VERSION='pip3'
-        #PYTHON_VERSION="$(sudo -H -u "$loggedInUser" brew --prefix)/bin/python3"
+        #PYTHON_VERSION='python3'
+        PYTHON_VERSION="$(sudo -H -u "$loggedInUser" brew --prefix)/bin/python3"
+        # no longer needed as python 3.4 and newer have pip included as a module (python3 -m pip install [...])
+        #PIP_VERSION='pip3'
         #PIP_VERSION="$(sudo -H -u "$loggedInUser" brew --prefix)/bin/pip3"
     else
         # not installed
@@ -212,26 +240,33 @@ check_homebrew_and_python_versions() {
     
     #echo ''
     printf "%-36s %-15s\n" "python used in script" "$PYTHON_VERSION"
-    printf "%-36s %-15s\n" "pip used in script" "$PIP_VERSION"
+    #printf "%-36s %-15s\n" "pip used in script" "$PIP_VERSION"
 }
 
 setting_config() {
+    echo ''
     ### sourcing .$SHELLrc or setting PATH
     # as the script is run from a launchd it would not detect the binary commands and would fail checking if binaries are installed
     # needed if binary is installed in a special directory
-    if [[ -n "$BASH_SOURCE" ]] && [[ -e /Users/"$loggedInUser"/.bashrc ]] && [[ $(cat /Users/"$loggedInUser"/.bashrc | grep 'PATH=.*/usr/local/bin:') != "" ]]
+    if [[ -n "$BASH_SOURCE" ]] && [[ -e /Users/"$loggedInUser"/.bashrc ]] && [[ $(cat /Users/"$loggedInUser"/.bashrc | grep 'export PATH=.*:$PATH"') != "" ]]
     then
         echo "sourcing .bashrc..."
-        . /Users/"$loggedInUser"/.bashrc
-    elif [[ -n "$ZSH_VERSION" ]] && [[ -e /Users/"$loggedInUser"/.zshrc ]] && [[ $(cat /Users/"$loggedInUser"/.zshrc | grep 'PATH=.*/usr/local/bin:') != "" ]]
+        #. /Users/"$loggedInUser"/.bashrc
+        # avoiding oh-my-zsh errors for root by only sourcing export PATH
+        source <(sed -n '/^export\ PATH\=/p' /Users/"$loggedInUser"/.bashrc)
+    elif [[ -n "$ZSH_VERSION" ]] && [[ -e /Users/"$loggedInUser"/.zshrc ]] && [[ $(cat /Users/"$loggedInUser"/.zshrc | grep 'export PATH=.*:$PATH"') != "" ]]
     then
         echo "sourcing .zshrc..."
         ZSH_DISABLE_COMPFIX="true"
-        . /Users/"$loggedInUser"/.zshrc
+        #. /Users/"$loggedInUser"/.zshrc
+        # avoiding oh-my-zsh errors for root by only sourcing export PATH
+        source <(sed -n '/^export\ PATH\=/p' /Users/"$loggedInUser"/.zshrc)
     else
-        echo "setting path for script..."
-        export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
+        echo "PATH was not set continuing with default value..."
     fi
+    echo "using PATH..." 
+    echo "$PATH"
+    echo ''
 }
 
 
@@ -242,51 +277,122 @@ wait_for_loggedinuser
 env_check_if_run_from_batch_script
 if [[ "$RUN_FROM_BATCH_SCRIPT" == "yes" ]]; then env_start_error_log; else start_log; fi
 # run before main function, e.g. for time format
-setting_config &> /dev/null
 
 screen_resolution() {
+    
+    setting_config
     
     ### loggedInUser
     echo "loggedInUser is $loggedInUser..."
     
-    
-    ### sourcing .$SHELLrc or setting PATH
-    #setting_config
-    
 
     ### homebrew and python versions
-    check_homebrew_and_python_versions
+    # no longer needed as the system or homebrew python version is only used to create an virtual python environment with its own version that ist used for the python commands in this script
+    # see below for more details on virtual python environment
+    #check_homebrew_and_python_versions
+
+
+    ### python changes
+    # python 3.11 implements the new PEP 668, marking python base environments as "externally managed"
+    # homebrew reflects these changes in python 3.12 and newer
+    # there are two recoomended ways of using python
+    
+    # 1     usage of two special commands --break-system-packages --user (not used in this script)
+    # use python3 -m pip [command] --break-system-packages --user to install to /Users/$USER/Library/Python/3.xx/ (it does not break system packages, just a scary name)
+    # the disadvantage of this usage is that all python project would use the same directory/virtualenv and it would not be possible to use different versions of python or the packages for each project
+    # therefore the directory has to exist and has to be in PATH when using sudo -H -u "$loggedInUser" python3 -m pip [...]
+    #echo ''
+    #echo "using new PATH including user python directory..."
+    #PYTHON_VERSION_FOLDER_TO_CREATE="$(echo $PYTHON3_VERSION | awk '{print $2}' | awk -F'.' '{print $1 "." $2}')"
+    #sudo -H -u "$loggedInUser" mkdir -p /Users/"$loggedInUser"/Library/Python/"$PYTHON_VERSION_FOLDER_TO_CREATE"/bin
+    #PATH=$PATH:/Users/"$loggedInUser"/Library/Python/"$PYTHON_VERSION_FOLDER_TO_CREATE"/bin
+    #echo "$PATH"
+    #echo ''
     
     
-    ### python modules  
+    ### python changes
+    # python 3.11 implements the new PEP 668, marking python base environments as "externally managed"
+    # homebrew reflects these changes in python 3.12 and newer
+    # it is recommended to create virtual environments (which doesn't work with sudo -H -u "$loggedInUser")
+    # or to use python3 -m pip [command] --break-system-packages --user to install to /Users/$USER/Library/Python/3.xx/ (it does not break system packages, just a scary name)
+    # therefore the directory has to exist and has to be in PATH when using sudo -H -u "$loggedInUser" python3 -m pip [...]
     echo ''
-    echo "checking python modules..."
+    echo "using new PATH including user python directory..."
+    PYTHON_VERSION_FOLDER_TO_CREATE="$(echo $PYTHON3_VERSION | awk '{print $2}' | awk -F'.' '{print $1 "." $2}')"
+    sudo -H -u "$loggedInUser" mkdir -p /Users/"$loggedInUser"/Library/Python/"$PYTHON_VERSION_FOLDER_TO_CREATE"/bin
+    PATH=$PATH:/Users/"$loggedInUser"/Library/Python/"$PYTHON_VERSION_FOLDER_TO_CREATE"/bin
+    echo "$PATH"
+    #echo ''
+    
+    # 2     virtual environments (used in this script)
+    # the best way is to create a virtual environment for each python usage/script/project and maintain them separately
+    # this gives the best fexiblility, testing possibilities and stability on the final used environment
+    PYTHON_VERSION="python3"
+    
+    # checking system python version (including homebrew)
+    echo ''
+    echo 'system python version incl. homebrew outside of the virtual environment...'
+    sudo -H -u "$loggedInUser" which "${PYTHON_VERSION}"
+    sudo -H -u "$loggedInUser" "${PYTHON_VERSION}" -V
+    # will be deactivated later after last python command of the script
+    #echo ''
+    
+    # creating and activating virtual python environment
+    echo ''
+    echo "creating and activating virtual python environment..."
+    PYTHON_VIRTUALENVIRONMENT="/Users/"$loggedInUser"/Library/Python/screen_resolution"
+    sudo -H -u "$loggedInUser" "${PYTHON_VERSION}" -m venv "$PYTHON_VIRTUALENVIRONMENT"
+    source "$PYTHON_VIRTUALENVIRONMENT"/bin/activate
+    
+    # virtual environment python version
+    echo ''
+    echo 'virtual environment python version...'
+    sudo -H -u "$loggedInUser" which "${PYTHON_VERSION}"
+    sudo -H -u "$loggedInUser" "${PYTHON_VERSION}" -V
+    # will be deactivated later after last python command of the script
+    #echo ''
+
+
+    ### updating
+    echo ''
+    echo "updating pip..."
+    
+    # updating pip itself
+    sudo -H -u "$loggedInUser" "${PYTHON_VERSION}" -m pip install --upgrade pip 2>&1 | grep -v 'already up-to-date' | grep -v 'already satisfied'
+    
+    # requirements 
+    echo ''
+    echo "installing requirements..."
     for i in pyobjc-framework-Cocoa pyobjc-framework-Quartz
     do
-        if [[ $("$PIP_VERSION" list | grep "$i") == "" ]]
+        if if [[ $(sudo -H -u "$loggedInUser" "${PYTHON_VERSION}" -m pip list | cut -f1 -d' ' | tr " " "\n" | awk '{if(NR>=3)print}' | cut -d' ' -f1 | grep "$i") == "" ]]
         then
             echo ''
-            echo "installing python module "$i"..."
-            if [[ $(sudo -H -u "$loggedInUser" command -v "$PIP_VERSION" | grep "/usr/local") == "" ]]
-            then
-                sudo "$PIP_VERSION" install "$i"
-            else
-                sudo -H -u "$loggedInUser" "$PIP_VERSION" install "$i"
-            fi
+            echo "installing python package "$i"..."
+            sudo -H -u "$loggedInUser" "${PYTHON_VERSION}" -m pip install "$i"
         else
-            echo "python module "$i" already installed..."
+            echo "python package "$i" already installed..."
         fi
     done
+    
+    # updating all packages to latest versions
+    echo ''
+    echo "updating all packages..."
+    #sudo -H -u "$loggedInUser" "${PYTHON_VERSION}" -m pip --disable-pip-version-check list --outdated --format=json | sudo -H -u "$loggedInUser" "${PYTHON_VERSION}" -c "import json, sys; print('\n'.join([x['name'] for x in json.load(sys.stdin)]))"
+    sudo -H -u "$loggedInUser" "${PYTHON_VERSION}" -m pip --disable-pip-version-check list --outdated --format=json | sudo -H -u "$loggedInUser" "${PYTHON_VERSION}" -c "import json, sys; print('\n'.join([x['name'] for x in json.load(sys.stdin)]))" | xargs -n1 sudo -H -u "$loggedInUser" "${PYTHON_VERSION}" -m pip install --upgrade 2>&1 | grep -v 'already up-to-date' | grep -v 'already satisfied'
+    # or (both working)
+    #sudo -H -u "$loggedInUser" "${PYTHON_VERSION}" -m pip --disable-pip-version-check list --outdated --user | cut -f1 -d' ' | tr " " "\n" | awk '{if(NR>=3)print}' | cut -d' ' -f1 | xargs -n1 sudo -H -u "$loggedInUser" "${PYTHON_VERSION}" -m pip install --upgrade 2>&1 | grep -v 'already up-to-date' | grep -v 'already satisfied'
     
     
     ### variables
     DISPLAY_TO_SET="EV2785"
     SYSTEM_PROFILER_DISPLAY_DATA=$(system_profiler SPDisplaysDataType -xml)
     #DISPLAYS=$(system_profiler SPDisplaysDataType -xml | grep -A2 "</data>" | awk -F'>|<' '/_name/{getline; print $3}')
-    DISPLAYS=$(echo "$SYSTEM_PROFILER_DISPLAY_DATA" | grep -A2 "</data>" | awk -F'>|<' '/_name/{getline; print $3}')
+    DISPLAYS=$(echo "$SYSTEM_PROFILER_DISPLAY_DATA" | awk -F'>|<' '/_name/{getline; print $3}' | sed '/^[[:space:]]*$/d')
     #echo "$DISPLAYS"
     #NUMBER_OF_CONNECTED_DISPLAYS=$(system_profiler SPDisplaysDataType -xml | grep -A2 "</data>" | awk -F'>|<' '/_name/{getline; print $3}' | wc -l | sed 's/^[[:space:]]*//g' | sed -e 's/[[:space:]]*$//g')
-    NUMBER_OF_CONNECTED_DISPLAYS=$(echo "$SYSTEM_PROFILER_DISPLAY_DATA" | grep -A2 "</data>" | awk -F'>|<' '/_name/{getline; print $3}' | wc -l | sed 's/^[[:space:]]*//g' | sed -e 's/[[:space:]]*$//g')  
+    #NUMBER_OF_CONNECTED_DISPLAYS=$(echo "$SYSTEM_PROFILER_DISPLAY_DATA" | grep -A2 "</data>" | awk -F'>|<' '/_name/{getline; print $3}' | wc -l | sed 's/^[[:space:]]*//g' | sed -e 's/[[:space:]]*$//g')
+    NUMBER_OF_CONNECTED_DISPLAYS=$(system_profiler SPDisplaysDataType | grep Resolution: | wc -l | sed '/^#/ d' | awk '{print $1}' | sed 's/^[[:space:]]*//g' | sed -e 's/[[:space:]]*$//g' | sed '/^$/d')
     #DISPLAY_RESOLUTION=$(system_profiler SPDisplaysDataType -xml | awk -F'>|<' '/_spdisplays_resolution/{getline; print $3}')
     #DISPLAY_RESOLUTION=$(echo "$SYSTEM_PROFILER_DISPLAY_DATA" | awk -F'>|<' '/_spdisplays_resolution/{getline; print $3}')
     #echo "$DISPLAY_RESOLUTION"
@@ -332,7 +438,7 @@ screen_resolution() {
                 fi
             fi
         else
-            echo "more than one display available, not making any changes..."
+            echo "not exactly one display available, not making any changes..."
         fi
     else
         echo ''
@@ -340,6 +446,12 @@ screen_resolution() {
         echo ''
         exit
     fi
+    
+    # deactivating/leaving python virtual environment
+    echo ''
+    echo "deactivating virtual python environment..."
+    deactivate
+    #sudo -H -u "$loggedInUser" which "${PYTHON_VERSION}"
     
     echo ''
     echo "done ;)"

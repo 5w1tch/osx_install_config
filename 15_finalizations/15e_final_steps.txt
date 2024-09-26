@@ -27,8 +27,19 @@ check if email database and index are ok by importing all mails to a new eagle f
 eaglefiler public beta
 https://forum.c-command.com/c/eaglefiler/10
 
+add dnd workflows for Shortcuts.app when updating to macOS 12
+    # open shortcuts
+    # add shortcut - name dnd-on
+    # add action focus on until switched off
+    # add shortcut - name dnd-off
+    # add action focus off until switched on
+
+add Desktop Picture when updating to macOS 12
+
+update macpass manually to latest continuous version when updating to macOS 12
+
 if no icloud account is used and red dot notification is shown therefore on dock icon
-of system preferences, run script 15f_delete_dock_notifications.sh
+of system settings, run script 15f_delete_dock_notifications.sh
 
 delete restore files on desktop and empty trash
 
@@ -36,7 +47,7 @@ add card(s) to apple wallet (only possible with sip fully enabled) (ts)
 
 enable touch id (ts)
 
-clear list of old devices in icloud acccount (ws & ts)
+clear list of old devices in apple id (icloud acccount) (ws & ts)
 
 check if running after reboot
 	virus scanner plus

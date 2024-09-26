@@ -1,6 +1,5 @@
 #!/bin/zsh
 
-
 ###
 ### script dir
 ###
@@ -26,7 +25,7 @@ if [[ -e "$SCRIPTS_FINAL_DIR"/_config_file/install_config_file.sh ]]
 then
 	# installing again if local file is different from online file
 	printf "\n${bold_text}###\nconfig file...\n###\n${default_text}"
-	"$SCRIPTS_FINAL_DIR"/_config_file/install_config_file.sh
+	ENABLE_SELF_UPDATE="no" "$SCRIPTS_FINAL_DIR"/_config_file/install_config_file.sh
 	# re-sourcing config file
 	if [[ -f ~/.shellscriptsrc ]]; then . ~/.shellscriptsrc; else echo '' && echo -e '\033[1;31mshell script config file not found...\033[0m\nplease install by running this command in the terminal...\n\n\033[1;34msh -c "$(curl -fsSL https://raw.githubusercontent.com/tiiiecherle/osx_install_config/master/_config_file/install_config_file.sh)"\033[0m\n' && exit 1; fi
 	eval "$(typeset -f env_get_shell_specific_variables)" && env_get_shell_specific_variables
@@ -108,21 +107,19 @@ env_activating_caffeinate
 ### trap
 ###
 
-trap_function_exit_middle() { env_delete_tmp_batch_script_fifo; env_delete_tmp_batch_script_gpg_fifo; env_delete_tmp_mas_script_fifo; unset SUDOPASSWORD; unset USE_PASSWORD; env_deactivating_caffeinate; rm -f "/tmp/batch_script_in_progress" }
+trap_function_exit_middle() { env_delete_tmp_batch_script_fifo; env_delete_tmp_batch_script_gpg_fifo; env_delete_tmp_sudo_mas_script_fifo; env_delete_tmp_appstore_mas_script_fifo; unset SUDOPASSWORD; unset USE_PASSWORD; env_deactivating_caffeinate; rm -f "/tmp/batch_script_in_progress" }
 "${ENV_SET_TRAP_SIG[@]}"
 "${ENV_SET_TRAP_EXIT[@]}"
 
 
 
 ###
-### batch script part 2
+### batch script part 1
 ###
 
 
 ### in addition to showing them in terminal write errors to logfile when run from batch script
-touch "/tmp/batch_script_in_progress"
-env_check_if_run_from_batch_script
-if [[ "$RUN_FROM_BATCH_SCRIPT" == "yes" ]]; then env_start_error_log; else :; fi
+env_force_start_error
 
 
 ### security permissions
@@ -138,22 +135,14 @@ echo "setting security and automation permissions..."
 AUTOMATION_APPS=(
 # source app name							automated app name										    allowed (1=yes, 0=no)
 "$SOURCE_APP_NAME                           System Events                                               1"
+"$SOURCE_APP_NAME                           $SYSTEM_GUI_SETTINGS_APP                                    1"
 "$SOURCE_APP_NAME                           Finder                                                      1"
 )
 PRINT_AUTOMATING_PERMISSIONS_ENTRIES="yes" env_set_apps_automation_permissions
 echo ''
 
-while IFS= read -r line || [[ -n "$line" ]] 
-do
-    if [[ "$line" == "" ]]; then continue; fi
-    i="$line"
-    if [[ $(xattr -l "$i" | grep com.apple.quarantine) != "" ]]
-    then
-        xattr -d com.apple.quarantine "$i"
-    else
-        :
-    fi
-done <<< "$(find "$SCRIPT_DIR_ONE_BACK" -mindepth 1 ! -path "*/*.app/*" -name "*.command")"
+DIRECTORY_TO_SEARCH_FOR_QUARANTINE="$SCRIPT_DIR_ONE_BACK"
+env_remove_quarantine_attribute
 
 
 ### homebrew install
@@ -229,6 +218,12 @@ batch_run_all() {
 	else
 		:
 	fi
+	if [[ "$RESTORE_DIR_UTM" == "" ]]
+	then
+		echo "no directory for restoring utm selected, respective scripts will be skipped..."
+	else
+		:
+	fi
 	echo ''
 	
 	
@@ -237,12 +232,19 @@ batch_run_all() {
 	then
 		printf "\n${bold_text}###\nmobile config...\n###\n${default_text}"
 		env_create_tmp_batch_script_fifo
-		"$SCRIPTS_FINAL_DIR"/_mobileconfig/install_mobileconfig_profiles.sh
+		"$SCRIPTS_FINAL_DIR"/_mobileconfig/install_mobileconfig_profiles_"$MACOS_VERSION_MAJOR_UNDERSCORE".sh
 		env_active_source_app
 	else
 		:
 	fi
 	env_activating_caffeinate
+	env_force_start_error
+    
+    
+    ### login shell customization
+	printf "\n${bold_text}###\nlogin shell customization...\n###\n${default_text}"
+	env_create_tmp_batch_script_fifo
+	"$SCRIPTS_FINAL_DIR"/02_preparations/2d_login_shell_customization.sh
 
 	
 	### homebrew and cask install
@@ -289,8 +291,36 @@ batch_run_all() {
 		    # not installed
 		    MISSING_SCRIPT_DEPENDENCY="yes"
 		fi
+		#echo "MISSING_SCRIPT_DEPENDENCY is "$MISSING_SCRIPT_DEPENDENCY""
 	}
-	
+
+	setting_config() {
+	    #echo ''
+	    ### sourcing .$SHELLrc or setting PATH
+	    # as the script is run from a launchd it would not detect the binary commands and would fail checking if binaries are installed
+	    # needed if binary is installed in a special directory
+	    if [[ -n "$BASH_SOURCE" ]] && [[ -e /Users/"$USER"/.bashrc ]] && [[ $(cat /Users/"$USER"/.bashrc | grep 'export PATH=.*:$PATH"') != "" ]]
+	    then
+	        echo "sourcing .bashrc..."
+	        #. /Users/"$USER"/.bashrc
+	        # avoiding oh-my-zsh errors for root by only sourcing export PATH
+	        source <(sed -n '/^export\ PATH\=/p' /Users/"$USER"/.bashrc)
+	    elif [[ -n "$ZSH_VERSION" ]] && [[ -e /Users/"$USER"/.zshrc ]] && [[ $(cat /Users/"$USER"/.zshrc | grep 'export PATH=.*:$PATH"') != "" ]]
+	    then
+	        echo "sourcing .zshrc..."
+	        ZSH_DISABLE_COMPFIX="true"
+	        #. /Users/"$USER"/.zshrc
+	        # avoiding oh-my-zsh errors for root by only sourcing export PATH
+	        source <(sed -n '/^export\ PATH\=/p' /Users/"$USER"/.zshrc)
+	    else
+	        echo "PATH was not set continuing with default value..."
+	    fi
+	    echo "using PATH..." 
+	    echo "$PATH"
+	    echo ''
+	}
+	setting_config
+		
 	MISSING_SCRIPT_DEPENDENCY=""
 	checking_dependencies
 	while [[ "$MISSING_SCRIPT_DEPENDENCY" == "yes" ]]
@@ -298,6 +328,7 @@ batch_run_all() {
 		sleep 30
 		checking_dependencies
 	done
+	echo "no missing dependencies, continuing..."
 	
 	
 	### creating symlinks
@@ -314,7 +345,7 @@ batch_run_all() {
 		env_create_tmp_batch_script_fifo
 		env_create_tmp_batch_script_gpg_fifo
 		#time ASK_FOR_RESTORE_DIRS="no" RESTORE_FILES_OPTION="unarchive" RESTORE_DIR_FILES="$RESTORE_DIR_FILES" RESTORE_DIR_VBOX="$RESTORE_DIR_VBOX" RESTORE_VBOX="$RESTORE_VBOX" "$SCRIPTS_FINAL_DIR"/07_backup_and_restore_script/files/restore_files.sh
-		ASK_FOR_RESTORE_DIRS="no" RESTORE_FILES_OPTION="unarchive" RESTORE_DIR_FILES="$RESTORE_DIR_FILES" RESTORE_DIR_VBOX="$RESTORE_DIR_VBOX" RESTORE_VBOX="$RESTORE_VBOX" "$SCRIPTS_FINAL_DIR"/07_backup_and_restore_script/files/restore_files.sh
+		ASK_FOR_RESTORE_DIRS="no" RESTORE_FILES_OPTION="unarchive" RESTORE_DIR_FILES="$RESTORE_DIR_FILES" RESTORE_DIR_VBOX="$RESTORE_DIR_VBOX" RESTORE_VBOX="$RESTORE_VBOX" RESTORE_DIR_UTM="$RESTORE_DIR_UTM" RESTORE_UTM="$RESTORE_UTM" "$SCRIPTS_FINAL_DIR"/07_backup_and_restore_script/files/restore_files.sh
 		unset RESTORE_FILES_OPTION
 		sleep 1
 		env_active_source_app
@@ -339,12 +370,6 @@ batch_run_all() {
 	env_activating_caffeinate
 	
 	
-	### login shell customization
-	printf "\n${bold_text}###\nlogin shell customization...\n###\n${default_text}"
-	env_create_tmp_batch_script_fifo
-	"$SCRIPTS_FINAL_DIR"/02_preparations/2d_login_shell_customization.sh
-	
-	
 	### nvram
 	printf "\n${bold_text}###\nnvram...\n###\n${default_text}"
 	env_create_tmp_batch_script_fifo
@@ -352,8 +377,18 @@ batch_run_all() {
 	
 	
 	### system update
-	printf "\n${bold_text}###\nsystem update...\n###\n${default_text}"
-	"$SCRIPTS_FINAL_DIR"/02_preparations/2a_system_update.sh
+	#printf "\n${bold_text}###\nsystem update...\n###\n${default_text}"
+	#"$SCRIPTS_FINAL_DIR"/02_preparations/2a_system_update.sh
+	
+	
+	### run before shutdown
+	# important: script can not delay shutdown and is killed by macos on shutdown
+	# more documentation can be found in the script
+	# moved to batchs script 1 to execute after the next reboot (after batch script 2)
+	printf "\n${bold_text}###\nrun before shutdown launchd...\n###\n${default_text}"
+	env_create_tmp_batch_script_fifo
+	"$SCRIPTS_FINAL_DIR"/09_launchd/9e_run_on_shutdown/install_script_run_on_shutdown_launchdservice.sh
+	env_active_source_app
 	
 	
 	### network configuration
@@ -451,11 +486,16 @@ cleanup_log() {
     sed -i '' '/^Tapped.*commands.*\(.*\)$/d' "$COMBINED_ERROR_LOG"
     sed -i '' '/\[new tag\]/d' "$COMBINED_ERROR_LOG"
     sed -i '' '/\[new branch\]/d' "$COMBINED_ERROR_LOG"
+    sed -i '' "/Switched to a new branch 'master'/d" "$COMBINED_ERROR_LOG"
+    sed -i '' '/\[neuer Branch\]/d' "$COMBINED_ERROR_LOG"
     sed -i '' '/^script -q/d' "$COMBINED_ERROR_LOG"
     sed -i '' '/\[.*\].*\[=.*\].*\%.*ETA/d' "$COMBINED_ERROR_LOG"
     sed -i '' '/\[.*\].*\[=.*\].*100\%/d' "$COMBINED_ERROR_LOG"
     sed -i '' "/Already on 'master'/d" "$COMBINED_ERROR_LOG"
+    sed -i '' "/Bereits auf 'master'/d" "$COMBINED_ERROR_LOG"
     sed -i '' '/reinstall.*brew reinstall/d' "$COMBINED_ERROR_LOG"
+    sed -i '' '/^To reinstall.*run\:/d' "$COMBINED_ERROR_LOG"
+    sed -i '' '/brew reinstall.*/d' "$COMBINED_ERROR_LOG"
     sed -i '' '/Von https\:\/\/github\.com/d' "$COMBINED_ERROR_LOG"
     sed -i '' '/From https\:\/\/github\.com/d' "$COMBINED_ERROR_LOG"
     sed -i '' '/Warning.*already installed/d' "$COMBINED_ERROR_LOG"
@@ -465,6 +505,7 @@ cleanup_log() {
     sed -i '' '/Please note that these warnings.*Homebrew maintainers/,/just ignore this\. Thanks/d' "$COMBINED_ERROR_LOG"
     sed -i '' "/Already on 'release/d" "$COMBINED_ERROR_LOG"
     sed -i '' '/security\:\ SecKeychainSearchCopyNext\:\ The specified item could not be found in the keychain\./d' "$COMBINED_ERROR_LOG"
+    sed -i '' '/It is expected behaviour.*will fail to build/,/may not accept it\./d' "$COMBINED_ERROR_LOG"
     perl -i -ane '$n=(@F==0) ? $n+1 : 0; print if $n<=2' "$COMBINED_ERROR_LOG"
 }
 sleep 1
@@ -517,5 +558,4 @@ defaults write com.apple.loginwindow TALLogoutSavesState -bool true
 ask_for_reboot
 
 if [[ -e "/tmp/batch_script_in_progress" ]]; then rm -f "/tmp/batch_script_in_progress"; else :; fi
-
 

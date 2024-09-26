@@ -41,7 +41,11 @@ launchd_services=(
 ### functions
 wait_for_loggedinuser() {
     ### waiting for logged in user
-    loggedInUser=$(/usr/bin/python -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+    # recommended way, but it seems apple deprecated python2 in macOS 12.3.0
+    # to keep on using the python command, a python module is needed
+    #pip3 install pyobjc-framework-SystemConfiguration
+    #loggedInUser=$(python3 -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+    loggedInUser=$(scutil <<< "show State:/Users/ConsoleUser" | awk '/Name :/ && ! /loginwindow/ { print $3 }')
     NUM=0
     MAX_NUM=30
     SLEEP_TIME=3
@@ -50,7 +54,11 @@ wait_for_loggedinuser() {
     do
         sleep "$SLEEP_TIME"
         NUM=$((NUM+1))
-        loggedInUser=$(/usr/bin/python -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+        # recommended way, but it seems apple deprecated python2 in macOS 12.3.0
+        # to keep on using the python command, a python module is needed
+        #pip3 install pyobjc-framework-SystemConfiguration
+        #loggedInUser=$(python3 -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+        loggedInUser=$(scutil <<< "show State:/Users/ConsoleUser" | awk '/Name :/ && ! /loginwindow/ { print $3 }')
     done
     #echo ''
     #echo "NUM is $NUM..."
@@ -366,23 +374,69 @@ set_vbox_network_device() {
     fi
 }
 
+set_utm_network_device() {
+    if [[ -e "/Applications/UTM.app" ]]
+    then
+        # installed
+        if [[ -e /Users/"$loggedInUser"/Library/Containers/com.utmapp.UTM/Data/Documents ]]
+        then
+            if [[ $(find /Users/"$loggedInUser"/Library/Containers/com.utmapp.UTM/Data/Documents -mindepth 1 -maxdepth 1 -name "*.utm" | wc -l | sed 's/^[[:space:]]*//g' | sed -e 's/[[:space:]]*$//g' | sed '/^$/d') -gt "0" ]]
+            then
+                if [[ "$DEVICE_ID" =~ ^en[0-9]$ ]]
+                then
+                    while IFS= read -r line || [[ -n "$line" ]]
+            		do
+            		    if [[ "$line" == "" ]]; then continue; fi
+                        UTM_VM="$line"
+                        echo "setting utm network to "$DEVICE_ID" for vm $(basename "$UTM_VM")..."
+                        if [[ -z $(/usr/libexec/PlistBuddy -c "Print :Network:BridgeInterface:BridgeInterface" "$UTM_VM/config.plist") ]] > /dev/null 2>&1
+                        then
+                            /usr/libexec/PlistBuddy -c "Add :Network:BridgeInterface:BridgeInterface string" "$UTM_VM/config.plist"
+                        	/usr/libexec/PlistBuddy -c "Set :Network:BridgeInterface:BridgeInterface "$DEVICE_ID"" "$UTM_VM/config.plist"
+                        else
+                            /usr/libexec/PlistBuddy -c "Set :Network:BridgeInterface:BridgeInterface "$DEVICE_ID"" "$UTM_VM/config.plist"
+                        fi  
+            			#echo ''
+                    done <<< "$(find /Users/"$loggedInUser"/Library/Containers/com.utmapp.UTM/Data/Documents -mindepth 1 -maxdepth 1 -name "*.utm")"
+                else
+                    echo ""$DEVICE"_DEVICE_ID is empty or has a wrong format..."
+                fi
+            else
+                echo "no utm vms found, skipping..."
+            fi
+        else
+            echo "directory for utm vms not found, skipping..."
+        fi
+    else
+        # virtualbox is not installed
+        echo "utm is not installed..."
+    fi
+}
+
 setting_config() {
+    echo ''
     ### sourcing .$SHELLrc or setting PATH
     # as the script is run from a launchd it would not detect the binary commands and would fail checking if binaries are installed
     # needed if binary is installed in a special directory
-    if [[ -n "$BASH_SOURCE" ]] && [[ -e /Users/"$loggedInUser"/.bashrc ]] && [[ $(cat /Users/"$loggedInUser"/.bashrc | grep 'PATH=.*/usr/local/bin:') != "" ]]
+    if [[ -n "$BASH_SOURCE" ]] && [[ -e /Users/"$loggedInUser"/.bashrc ]] && [[ $(cat /Users/"$loggedInUser"/.bashrc | grep 'export PATH=.*:$PATH"') != "" ]]
     then
         echo "sourcing .bashrc..."
-        . /Users/"$loggedInUser"/.bashrc
-    elif [[ -n "$ZSH_VERSION" ]] && [[ -e /Users/"$loggedInUser"/.zshrc ]] && [[ $(cat /Users/"$loggedInUser"/.zshrc | grep 'PATH=.*/usr/local/bin:') != "" ]]
+        #. /Users/"$loggedInUser"/.bashrc
+        # avoiding oh-my-zsh errors for root by only sourcing export PATH
+        source <(sed -n '/^export\ PATH\=/p' /Users/"$loggedInUser"/.bashrc)
+    elif [[ -n "$ZSH_VERSION" ]] && [[ -e /Users/"$loggedInUser"/.zshrc ]] && [[ $(cat /Users/"$loggedInUser"/.zshrc | grep 'export PATH=.*:$PATH"') != "" ]]
     then
         echo "sourcing .zshrc..."
         ZSH_DISABLE_COMPFIX="true"
-        . /Users/"$loggedInUser"/.zshrc
+        #. /Users/"$loggedInUser"/.zshrc
+        # avoiding oh-my-zsh errors for root by only sourcing export PATH
+        source <(sed -n '/^export\ PATH\=/p' /Users/"$loggedInUser"/.zshrc)
     else
-        echo "setting path for script..."
-        export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
+        echo "PATH was not set continuing with default value..."
     fi
+    echo "using PATH..." 
+    echo "$PATH"
+    echo ''
 }
 
 check_if_ethernet_is_active() {
@@ -450,9 +504,10 @@ wait_for_loggedinuser
 env_check_if_run_from_batch_script
 if [[ "$RUN_FROM_BATCH_SCRIPT" == "yes" ]]; then env_start_error_log; else start_log; fi
 # run before main function, e.g. for time format
-setting_config &> /dev/null
 
 network_select() {
+
+    setting_config
     
     ### loggedInUser
     echo "loggedInUser is $loggedInUser..."
@@ -503,6 +558,12 @@ network_select() {
             check_if_online
             if [[ "$ONLINE_STATUS" == "offline" ]]
             then
+                # check again if first online check fails
+                sleep 3
+                check_if_online
+            fi
+            if [[ "$ONLINE_STATUS" == "offline" ]]
+            then
                 # switch to (ethernet) automatic dhcp profile
                 echo ''
                 echo "changing to location $(networksetup -listlocations | grep --ignore-case '^auto')..."
@@ -534,16 +595,18 @@ network_select() {
         DEVICE="ETHERNET"
         DEVICE_ID="$ETHERNET_DEVICE_ID"
         echo ''
-        echo "enabling "$DEVICE" for vbox..."
+        echo "enabling "$DEVICE" for vms..."
         set_vbox_network_device
+        set_utm_network_device
     else
         change_to_location_custom
         enable_wlan_device
         DEVICE="WLAN"
         DEVICE_ID="$WLAN_DEVICE_ID"
         echo ''
-        echo "enabling "$DEVICE" for vbox..."
+        echo "enabling "$DEVICE" for vms..."
         set_vbox_network_device
+        set_utm_network_device
     fi
         
     # loading and disabling other launchd services

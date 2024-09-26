@@ -292,14 +292,28 @@ formulae_show_updates_parallel() {
         #local FORMULA_REVISION=$(brew info --formula "$FORMULA" --json=v2 | jq -r '.formulae | .[]' | grep revision | grep -o '[0-9]')
         local FORMULA_REVISION=$(printf '%s\n' "$FORMULA_INFO" | jq -r '.revision')
         #echo FORMULA_REVISION is $FORMULA_REVISION
+        if [[ $(echo "$FORMULA" | grep "python@3.*") != "" ]]
+        then
+            OTHER_FORMULA_VERSION="python3"
+            NEW_FORMULA_INFO=$(brew info --formula --json=v2 "$OTHER_FORMULA_VERSION" | jq -r '.formulae | .[]')
+        else
+            :
+        fi
+        if [[ "$NEW_FORMULA_INFO" == "" ]]
+        then
+            NEW_FORMULA_INFO="$FORMULA_INFO"
+        else
+            :
+        fi
         if [[ "$FORMULA_REVISION" == "0" ]]
         then
             #local NEW_VERSION=$(printf '%s\n' "$FORMULA_INFO" | grep -e "$FORMULA: .*" | cut -d" " -f3 | sed 's/,//g')
-            local NEW_VERSION=$(printf '%s\n' "$FORMULA_INFO" | jq -r '.versions.stable')
+            local NEW_VERSION=$(printf '%s\n' "$NEW_FORMULA_INFO" | jq -r '.versions.stable')
         else
             #local NEW_VERSION=$(echo $(printf '%s\n' "$FORMULA_INFO" | grep -e "$FORMULA: .*" | cut -d" " -f3 | sed 's/,//g')_"$FORMULA_REVISION")
-            local NEW_VERSION=$(echo $(printf '%s\n' "$FORMULA_INFO" | jq -r '.versions.stable')_"$FORMULA_REVISION")
+            local NEW_VERSION=$(echo $(printf '%s\n' "$NEW_FORMULA_INFO" | jq -r '.versions.stable')_"$FORMULA_REVISION")
         fi
+        FORMULA_INFO=$(brew info --formula --json=v2 "$FORMULA" | jq -r '.formulae | .[]')
         #echo NEW_VERSION is $NEW_VERSION
         local NUMBER_OF_INSTALLED_FORMULAE=$(printf '%s\n' "$INSTALLED_FORMULAE" | wc -l | sed 's/^[[:space:]]*//g' | sed -e 's/[[:space:]]*$//g')
         local NUMBER_OF_FORMULA=$(printf '%s\n' "$INSTALLED_FORMULAE" | grep -n "^$FORMULA$" | awk -F: '{print $1}' | sed 's/^[[:space:]]*//g' | sed -e 's/[[:space:]]*$//g')
@@ -309,7 +323,7 @@ formulae_show_updates_parallel() {
         #echo NUMBER_OF_INSTALLED_VERSIONS is "$NUMBER_OF_INSTALLED_VERSIONS"
         local NEWEST_INSTALLED_VERSION=$(printf '%s\n' "$INSTALLED_VERSIONS" | tail -n 1)
         #echo NEWEST_INSTALLED_VERSION is "$NEWEST_INSTALLED_VERSION"
-        local CHECK_RESULT=$(printf '%s\n' "$INSTALLED_VERSIONS" | grep -q "$NEW_VERSION" 2>&1 && echo ok || echo outdated)
+        local CHECK_RESULT=$(printf '%s\n' "$INSTALLED_VERSIONS" | grep -q "^$NEW_VERSION$" 2>&1 && echo ok || echo outdated)
         #echo CHECK_RESULT is $CHECK_RESULT
         local NAME_PRINT=$(printf '%s\n' "$FORMULA" | awk -v len=20 '{ if (length($0) > len) print substr($0, 1, len-3) "..."; else print; }')
         local CURRENT_INSTALLED_VERSION_PRINT=$(printf '%s\n' "$NEWEST_INSTALLED_VERSION" | awk -v len=15 '{ if (length($0) > len) print substr($0, 1, len-3) "..."; else print; }')
@@ -353,7 +367,7 @@ formulae_show_updates_parallel() {
     #echo "listing brew formulae updates finished ;)"
 }
 
-formulae_install_updates() {
+formulae_install_updates_parallel() {
     echo "installing brew formulae updates..."
     
     if [[ ! -s "$TMP_DIR_FORMULAE"/"$DATE_LIST_FILE_FORMULAE" ]]
@@ -366,11 +380,8 @@ formulae_install_updates() {
         # sorting the outdated casks file after using parallel which can change output order
         sort "$TMP_DIR_FORMULAE"/"$DATE_LIST_FILE_FORMULAE" -o "$TMP_DIR_FORMULAE"/"$DATE_LIST_FILE_FORMULAE"
             
-        while IFS= read -r line || [[ -n "$line" ]]
-		do
-		    if [[ "$line" == "" ]]; then continue; fi
-            FORMULA="$line"
-            
+        formulae_install_updates_parallel_inside() {
+            FORMULA="$1"
             echo 'updating '"$FORMULA"'...'            
             #if [[ $(brew outdated --quiet | grep "^$FORMULA$") == "" ]] && [[ $(brew outdated --quiet | grep "/$FORMULA$") == "" ]]
             #[[ $(brew outdated --verbose | grep "^$FORMULA[[:space:]]") == "" ]]
@@ -400,24 +411,44 @@ formulae_install_updates() {
                 else
                     :
                 fi
-                env_use_password | brew upgrade "$FORMULA"
-                #
+                
+                # preserver colored output using script
+                if [[ "$FORMULA" =~ "^python@3.*" ]]
+                then
+                    FORMULA_CLEANUP_NEEDED="no"
+                    script -q /dev/null brew uninstall "$FORMULA"
+                    script -q /dev/null brew install --formula python3
+                else
+                    script -q /dev/null brew upgrade --formula "$FORMULA"
+                    #brew upgrade --formula "$FORMULA"
+                fi
+                
             #fi
             echo 'removing old installed versions of '"$FORMULA"'...'
             env_use_password | brew cleanup "$FORMULA"
             echo ''
             
             # cleanup entries
-            local INSTALLED_VERSIONS=$(ls -1 "$BREW_FORMULAE_PATH"/"$FORMULA" | sort -V)
-            local NUMBER_OF_INSTALLED_VERSIONS=$(printf '%s\n' "$INSTALLED_VERSIONS" | wc -l | sed -e 's/^[ \t]*//')
-            if [[ "$NUMBER_OF_INSTALLED_VERSIONS" -gt "1" ]]
+            if [[ "$FORMULA_CLEANUP_NEEDED" == "no" ]]
             then
-                echo -e "$NUMBER_OF_INSTALLED_VERSIONS\t$FORMULA" >> "$TMP_DIR_FORMULAE_VERSIONS"/"$DATE_LIST_FILE_FORMULAE_VERSIONS"
-            else
                 :
-            	#echo "only one version installed..."
+            else   
+                local INSTALLED_VERSIONS=$(ls -1 "$BREW_FORMULAE_PATH"/"$FORMULA" | sort -V)
+                local NUMBER_OF_INSTALLED_VERSIONS=$(printf '%s\n' "$INSTALLED_VERSIONS" | wc -l | sed -e 's/^[ \t]*//')
+                if [[ "$NUMBER_OF_INSTALLED_VERSIONS" -gt "1" ]]
+                then
+                    echo -e "$NUMBER_OF_INSTALLED_VERSIONS\t$FORMULA" >> "$TMP_DIR_FORMULAE_VERSIONS"/"$DATE_LIST_FILE_FORMULAE_VERSIONS"
+                else
+                    :
+                	#echo "only one version installed..."
+                fi
             fi
-        done <<< "$(cat "$TMP_DIR_FORMULAE"/"$DATE_LIST_FILE_FORMULAE")"
+        }
+        
+        # by sourcing the respective env_parallel.SHELL the command itself can be used cross-shell
+        # it is not neccessary to export variables or functions when using env_parallel
+        # zsh does not support exporting functions, thats why parallels is prefered over xargs (bash only)
+        if [[ "$(cat "$TMP_DIR_FORMULAE"/"$DATE_LIST_FILE_FORMULAE")" != "" ]]; then env_parallel --will-cite -j"1" --line-buffer -k "formulae_install_updates_parallel_inside {}" ::: "$(cat "$TMP_DIR_FORMULAE"/"$DATE_LIST_FILE_FORMULAE")"; fi
         
         # special ffmpeg
         # versions > 4.0.2_1 include h265 by default, so rebuilding does not seem to be needed any more
@@ -478,9 +509,9 @@ casks_show_updates_parallel() {
     export DATE_LIST_FILE_CASKS
     touch "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS"
     
-    DATE_LIST_FILE_CASKS_AUTOSTART=$(echo "casks_update_autostart"_$(date +%Y-%m-%d_%H-%M-%S).txt)
-    export DATE_LIST_FILE_CASKS_AUTOSTART
-    touch "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS_AUTOSTART"
+    #DATE_LIST_FILE_CASKS_AUTOSTART=$(echo "casks_update_autostart"_$(date +%Y-%m-%d_%H-%M-%S).txt)
+    #export DATE_LIST_FILE_CASKS_AUTOSTART
+    #touch "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS_AUTOSTART"
     
     # cleanup formulae preparation
     TMP_DIR_CASK_VERSIONS=/tmp/cask_versions
@@ -508,7 +539,10 @@ casks_show_updates_parallel() {
         #local CASK_INFO=$(brew info --cask "$CASK")
         local CASK_NAME=$(printf '%s\n' "$CASK_INFO" | jq -r '.name | .[]')
         #brew info --cask --json=v2 "$CASK" | jq -r '.casks | .[]|(.artifacts|map(.[]?|select(type=="string")|select(test(".app$"))))|.[]'
-        local CASK_ARTIFACT_APP=$(printf '%s\n' "$CASK_INFO" | jq -r '.artifacts|map(.[]?|select(type=="string")|select(test(".app$")))|.[]')
+        #local CASK_ARTIFACT_APP=$(printf '%s\n' "$CASK_INFO" | jq -r '.artifacts|map(.[]?|select(type=="string")|select(test(".app$")))|.[]')
+        #brew info --cask --json=v2 "$CASK" | jq -r '.casks | .[] | .artifacts | .[] | .app | .[]?'
+        local CASK_ARTIFACT_APP=$(printf '%s\n' "$CASK_INFO" | jq -r '.artifacts | .[] | .app | .[]?')
+        #echo "$CASK_ARTIFACT_APP"
         if [[ "$CASK_ARTIFACT_APP" != "" ]]
         then
             local CASK_ARTIFACT_APP_NO_EXTENSION=$(echo ${$(basename $CASK_ARTIFACT_APP)%.*})
@@ -529,7 +563,20 @@ casks_show_updates_parallel() {
         local NEWEST_INSTALLED_VERSION=$(printf '%s\n' "$INSTALLED_VERSIONS" | head -n 1)
         #local NEWEST_INSTALLED_VERSION="$NEW_VERSION"
         #echo NEWEST_INSTALLED_VERSION is "$NEWEST_INSTALLED_VERSION"
-        local CHECK_RESULT=$(printf '%s\n' "$INSTALLED_VERSIONS" | grep -q "$NEW_VERSION" 2>&1 && echo ok || echo outdated)
+        local CHECK_RESULT=$(printf '%s\n' "$INSTALLED_VERSIONS" | grep -q "^$NEW_VERSION$" 2>&1 && echo ok || echo outdated)
+        if [[ "$CHECK_RESULT" == "outdated" ]]
+        then
+            local CHECK_RESULT=$(printf '%s\n' "$INSTALLED_VERSIONS" | grep -q "^$NEW_VERSION,.*$" 2>&1 && echo ok || echo outdated)
+            if [[ "$CHECK_RESULT" == "ok" ]]
+            then
+                #local NEW_VERSION="$NEWEST_INSTALLED_VERSION"
+                 local NEWEST_INSTALLED_VERSION="$NEW_VERSION"
+            else
+                :
+            fi
+        else
+            :
+        fi
         #echo CHECK_RESULT is $CHECK_RESULT
         local CASK_NAME_PRINT=$(printf '%s\n' "$CASK" | awk -v len=20 '{ if (length($0) > len) print substr($0, 1, len-3) "..."; else print; }')
         local CURRENT_INSTALLED_VERSION_PRINT=$(printf '%s\n' "$NEWEST_INSTALLED_VERSION" | awk -v len=15 '{ if (length($0) > len) print substr($0, 1, len-3) "..."; else print; }')
@@ -565,18 +612,21 @@ casks_show_updates_parallel() {
         
         # autostart
         # 10.15 is not opening autostart apps on next boot after install/update without explicitly granting permissions or opening manually before autostart
-        env_get_autostart_items
-        if [[ "$AUTOSTART_ITEMS" != "" ]] && [[ "$CHECK_RESULT" == "outdated" ]] && [[ "$CASK_ARTIFACT_APP_NO_EXTENSION" != "" ]]
-        then
-            if [[ $(printf '%s\n' "$AUTOSTART_ITEMS" | grep -i "$CASK") != "" ]] || [[ $(printf '%s\n' "$AUTOSTART_ITEMS" | grep -i "$CASK_ARTIFACT_APP_NO_EXTENSION") != "" ]]
+        add_cask_to_autostart_list() {
+            env_get_autostart_items
+            if [[ "$AUTOSTART_ITEMS" != "" ]] && [[ "$CHECK_RESULT" == "outdated" ]] && [[ "$CASK_ARTIFACT_APP_NO_EXTENSION" != "" ]]
             then
-                echo -e "$CASK\t\t$CASK_ARTIFACT_APP_NO_EXTENSION" >> "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS_AUTOSTART"
+                if [[ $(printf '%s\n' "$AUTOSTART_ITEMS" | grep -i "$CASK") != "" ]] || [[ $(printf '%s\n' "$AUTOSTART_ITEMS" | grep -i "$CASK_ARTIFACT_APP_NO_EXTENSION") != "" ]]
+                then
+                    echo -e "$CASK\t\t$CASK_ARTIFACT_APP_NO_EXTENSION" >> "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS_AUTOSTART"
+                else
+                    :
+                fi
             else
                 :
             fi
-        else
-            :
-        fi
+        }
+        #add_cask_to_autostart_list
     	
     	if [[ "$CONT_LATEST" =~ ^(yes|y)$ ]]
         then
@@ -655,68 +705,12 @@ casks_install_updates() {
             # reinstall deletes autostart entries as it runs uninstall and then install
             #env_use_password | brew reinstall --cask "$line" --force
             env_use_password | brew install --cask "$CASK" --force
-            echo ''
-            
-            if [[ "$CASK" == "teamviewer" ]]
-            then 
-            	sleep 2
-            	osascript -e "tell app \"TeamViewer.app\" to quit" >/dev/null 2>&1
-            	#pkill -15 "TeamViewer"
-            	sleep 2
-                env_active_source_app
-            fi
-            if [[ "$CASK" == "libreoffice" ]]
-            then
-                SKIP_ENV_GET_PATH_TO_APP="yes"
-                PATH_TO_APP=""$PATH_TO_APPS"/LibreOffice.app"
-                env_set_open_on_first_run_permissions
-                unset SKIP_ENV_GET_PATH_TO_APP
-            else
-                :
-            fi
-            if [[ "$CASK" == "libreoffice-language-pack" ]]
-            then
-                SKIP_ENV_GET_PATH_TO_APP="yes"
-                LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK=$(ls -1 /usr/local/Caskroom/libreoffice-language-pack | sort -V | head -n 1)
-                PATH_TO_APP="/usr/local/Caskroom/libreoffice-language-pack/$LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK/LibreOffice Language Pack.app"
-                env_set_open_on_first_run_permissions
-                PATH_TO_APP=""$PATH_TO_APPS"/LibreOffice.app"
-                env_set_open_on_first_run_permissions
-                unset SKIP_ENV_GET_PATH_TO_APP
-            else
-                :
-            fi
-            if [[ "$CASK" == "zoom" ]]
-            then 
-            	sleep 2
-            	osascript -e "tell app \"zoom.us.app\" to quit" >/dev/null 2>&1
-            	#pkill -15 "zoom.us"
-            	sleep 2
-                env_active_source_app
-            fi
-            # allow opening app
-            if [[ "$CASK" == "jitsi-meet" ]] || [[ "$CASK" == "chromium" ]]
-            then
-                local CASK_INFO=$(brew info --cask --json=v2 "$CASK" | jq -r '.casks | .[]')
-                #local CASK_INFO=$(brew info --cask "$CASK")
-                local CASK_NAME=$(printf '%s\n' "$CASK_INFO" | jq -r '.name | .[]')
-                #brew info --cask --json=v2 "$CASK" | jq -r '.casks | .[]|(.artifacts|map(.[]?|select(type=="string")|select(test(".app$"))))|.[]'
-                local CASK_ARTIFACT_APP=$(printf '%s\n' "$CASK_INFO" | jq -r '.artifacts|map(.[]?|select(type=="string")|select(test(".app$")))|.[]')
-                if [[ "$CASK_ARTIFACT_APP" != "" ]]
-                then
-                    local CASK_ARTIFACT_APP_NO_EXTENSION=$(echo ${$(basename $CASK_ARTIFACT_APP)%.*})
-                else
-                    :
-                fi
-    	        local APP_NAME="$CASK_ARTIFACT_APP_NO_EXTENSION"
-                env_set_open_on_first_run_permissions
-            else
-                :
-            fi
+            #echo ''
             
             # cleanup entries
+            echo "searching for old "$CASK" versions..."
             local INSTALLED_VERSIONS=$(ls -1tc "$BREW_CASKS_PATH"/"$CASK")
-            local NUMBER_OF_INSTALLED_VERSIONS=$(printf '%s\n' "$INSTALLED_VERSIONS" | wc -l | sed -e 's/^[ \t]*//') 
+            local NUMBER_OF_INSTALLED_VERSIONS=$(printf '%s\n' "$INSTALLED_VERSIONS" | wc -l | sed -e 's/^[ \t]*//')
             if [[ "$NUMBER_OF_INSTALLED_VERSIONS" -gt "1" ]]
             then
                 echo -e "$NUMBER_OF_INSTALLED_VERSIONS\t$CASK" >> "$TMP_DIR_CASK_VERSIONS"/"$DATE_LIST_FILE_CASKS_VERSIONS"
@@ -724,6 +718,112 @@ casks_install_updates() {
                 :
             	#echo "only one version installed..."
             fi
+            
+            # no longer needed as it is integrated in the cask to quit the app
+            # https://github.com/Homebrew/homebrew-cask/blob/master/Casks/teamviewer.rb
+            #if [[ "$CASK" == "teamviewer" ]]
+            #then 
+            #	sleep 2
+            #	osascript -e "tell app \"TeamViewer.app\" to quit" >/dev/null 2>&1
+            #	#pkill -15 "TeamViewer"
+            #	sleep 2
+            #    env_active_source_app
+            #fi
+            
+            # no longer needed
+            #if [[ "$CASK" == "libreoffice" ]]
+            #then
+            #    SKIP_ENV_GET_PATH_TO_APP="yes"
+            #    PATH_TO_APP=""$PATH_TO_APPS"/LibreOffice.app"
+            #    env_set_open_on_first_run_permissions
+            #    unset SKIP_ENV_GET_PATH_TO_APP
+            #else
+            #    :
+            #fi
+            
+            #if [[ "$CASK" == "libreoffice-language-pack" ]]
+            #then
+            #    SKIP_ENV_GET_PATH_TO_APP="yes"
+            #    LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK=$(ls -1 "$BREW_PATH_PREFIX"/Caskroom/libreoffice-language-pack | sort -V | head -n 1)
+            #    PATH_TO_APP=""$BREW_PATH_PREFIX"/Caskroom/libreoffice-language-pack/$LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK/LibreOffice Language Pack.app"
+            #    env_set_open_on_first_run_permissions
+            #    PATH_TO_APP=""$PATH_TO_APPS"/LibreOffice.app"
+            #    env_set_open_on_first_run_permissions
+            #    unset SKIP_ENV_GET_PATH_TO_APP
+            #else
+            #    :
+            #fi
+            
+            # no longer needed as it is integrated in the cask to quit the app
+            # https://github.com/Homebrew/homebrew-cask/blob/master/Casks/zoom.rb
+            #if [[ "$CASK" == "zoom" ]]
+            #then 
+            #	sleep 2
+            #	osascript -e "tell app \"zoom.us.app\" to quit" >/dev/null 2>&1
+            #	#pkill -15 "zoom.us"
+            #	sleep 2
+            #    env_active_source_app
+            #fi
+            
+            # allow opening app
+            allow_opening_casks_inside() {
+                line="$1"
+                if [[ "$line" == "" ]]
+                then
+                    line="$CASK"
+                fi
+                if [[ $(brew list --cask | tr "," "\n" | grep "^$line$") != "" ]]
+                then
+                    echo "$line"
+                    local CASK_INFO=$(brew info --cask --json=v2 "$line" | jq -r '.casks | .[]')
+                    #local CASK_INFO=$(brew info --cask "$CASK")
+                    local CASK_NAME=$(printf '%s\n' "$CASK_INFO" | jq -r '.name | .[]')
+                    #echo "$CASK_NAME"
+                    #brew info --cask --json=v2 "$CASK" | jq -r '.casks | .[]|(.artifacts|map(.[]?|select(type=="string")|select(test(".app$"))))|.[]'
+                    #local CASK_ARTIFACT_APP=$(printf '%s\n' "$CASK_INFO" | jq -r '.artifacts|map(.[]?|select(type=="string")|select(test(".app$")))|.[]')
+                    #brew info --cask --json=v2 "$CASK" | jq -r '.casks | .[] | .artifacts | .[] | .app | .[]?'
+                    local CASK_ARTIFACT_APP=$(printf '%s\n' "$CASK_INFO" | jq -r '.artifacts | .[] | .app | .[]?')
+                    #echo "$CASK_ARTIFACT_APP"
+                    if [[ "$CASK_ARTIFACT_APP" != "" ]]
+                    then
+                        local CASK_ARTIFACT_APP_NO_EXTENSION=$(echo ${$(basename $CASK_ARTIFACT_APP)%.*})
+                    else
+                        local CASK_ARTIFACT_APP_NO_EXTENSION="$CASK_NAME"
+                    fi
+                    local APP_NAME="$CASK_ARTIFACT_APP_NO_EXTENSION"
+                    #echo "$APP_NAME"
+                    env_set_open_on_first_run_permissions
+                    # allow additional apps inside of other apps
+                    if [[ "$line" == "bettertouchtool" ]]
+                    then
+                        local APP_NAME="BTTRelaunch"
+                        env_set_open_on_first_run_permissions
+                    else
+                        :
+                    fi
+                    if [[ "$line" == "alfred" ]]
+                    then
+                        local APP_NAME="Alfred Preferences"
+                        env_set_open_on_first_run_permissions
+                    else
+                        :
+                    fi
+                    if [[ "$line" == "bartender" ]]
+                    then
+                        local APP_NAME="BartenderStartAtLoginHelper"
+                        env_set_open_on_first_run_permissions
+                    else
+                        :
+                    fi
+                else
+                    :
+                fi
+            }
+            echo "allowing "$CASK" to open..."
+            allow_opening_casks_inside
+            
+            echo ''
+            
         done <<< "$(cat "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS")"
     
         echo "installing casks updates finished ;)"
@@ -762,10 +862,16 @@ post_cask_installations() {
 	    
     if [[ $(cat "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS" | grep "^libreoffice-language-pack$") != "" ]]
 	then
-	    echo ''
-        echo "installing libreoffice language pack..."
-        LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK=$(ls -1 /usr/local/Caskroom/libreoffice-language-pack | sort -V | head -n 1)
-        open "/usr/local/Caskroom/libreoffice-language-pack/$LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK/LibreOffice Language Pack.app"	
+        LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK=$(ls -1 "$BREW_PATH_PREFIX"/Caskroom/libreoffice-language-pack | sort -V | head -n 1)
+        if [[ $(xattr -l ""$BREW_PATH_PREFIX"/Caskroom/libreoffice-language-pack/$LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK/LibreOffice Language Pack.app" | grep com.apple.quarantine) == "" ]]
+        then
+            :
+        else
+            echo ''
+            echo "installing libreoffice language pack..."
+            open ""$BREW_PATH_PREFIX"/Caskroom/libreoffice-language-pack/$LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK/LibreOffice Language Pack.app"	
+        fi
+        
         #echo ''
     else
 	    :
@@ -815,21 +921,55 @@ post_cask_installations() {
     #autostart_permissions_cask_specific
     
     # if casks were updated ensure permissions for all autostart apps
-    if [[ ! -s "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS" ]]
-    then
-    	# file is empty or does not exist
-        :
-    else
-    	# file exists and is not empty
-        echo ''
-        echo "setting permissions for autostart apps..."
-        env_get_autostart_items
-        env_check_if_parallel_is_installed 1>/dev/null
-        #echo ''
-        if [[ "${AUTOSTART_ITEMS[@]}" != "" ]]; then env_parallel --will-cite -j"$NUMBER_OF_MAX_JOBS_ROUNDED" --line-buffer -k "env_set_permissions_autostart_apps {}" ::: "${AUTOSTART_ITEMS[@]}"; fi 1>/dev/null
-    fi
+    set_permissions_autostart_apps() {
+        if [[ ! -s "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS" ]]
+        then
+        	# file is empty or does not exist
+            :
+        else
+        	# file exists and is not empty
+            echo ''
+            echo "setting permissions for autostart apps..."
+            env_get_autostart_items
+            env_check_if_parallel_is_installed 1>/dev/null
+            #echo ''
+            if [[ "${AUTOSTART_ITEMS[@]}" != "" ]]; then env_parallel --will-cite -j"$NUMBER_OF_MAX_JOBS_ROUNDED" --line-buffer -k "env_set_permissions_autostart_apps {}" ::: "${AUTOSTART_ITEMS[@]}"; fi 1>/dev/null
+        fi
+    }
+    #set_permissions_autostart_apps
     
 }
+
+allow_opening_casks() {
+    # allow opening apps
+    echo ''
+    echo "allowing casks to open..."
+    
+    if [[ "$WHICH_CASKS_TO_ALLOW" == "list" ]]
+    then
+        # only updated casks
+        ALLOWED_CASKS_LIST=$(cat "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS")
+        # list
+        #ALLOWED_CASKS_LIST=(
+        #jitsi-meet
+        #chromium
+        #)
+    else
+        # all installed casks
+        ALLOWED_CASKS_LIST=$(brew list --cask | tr "," "\n" | uniq)
+    fi
+    ALLOWED_CASKS=$(printf "%s\n" "${ALLOWED_CASKS_LIST[@]}")
+    
+    # by sourcing the respective env_parallel.SHELL the command itself can be used cross-shell
+    # it is not neccessary to export variables or functions when using env_parallel
+    # zsh does not support exporting functions, thats why parallels is prefered over xargs (bash only)
+    
+    if [[ "${ALLOWED_CASKS[@]}" != "" ]]; then env_parallel --will-cite -j"$NUMBER_OF_MAX_JOBS_ROUNDED" --line-buffer -k "allow_opening_casks_inside {}" ::: "${ALLOWED_CASKS[@]}"; fi
+    
+    echo ''
+
+}
+
 
 ###
 ### running script
@@ -868,23 +1008,24 @@ trap_function_exit_middle() { env_stop_sudo; unset SUDOPASSWORD; unset USE_PASSW
 echo "checking directory structure and permissions..."
 echo ''
 
-if [[ ! -d /usr/local ]]; 
-then
-    sudo mkdir /usr/local
-fi
-#sudo chown -R "$USER":staff /usr/local
-sudo chown -R $(whoami) /usr/local
-
 # checking if homebrew is installed
 if command -v brew &> /dev/null
 then
     # installed
     echo "homebrew is installed..."
+    BREW_PATH_PREFIX=$(brew --prefix)
 else
     # not installed
     echo "homebrew not installed, exiting script..."
     exit
 fi
+
+if [[ ! -d "$BREW_PATH_PREFIX" ]]; 
+then
+    sudo mkdir "$BREW_PATH_PREFIX"
+fi
+#sudo chown -R "$USER":staff "$BREW_PATH_PREFIX"
+sudo chown -R $(whoami) "$BREW_PATH_PREFIX"
 
 if [[ $(brew tap | grep homebrew/cask) != "" ]]
 then
@@ -956,6 +1097,7 @@ then
     
     # more variables
     echo ''
+    
     BREW_PATH=$(brew --repository)
     export BREW_PATH
     if [[ $(echo "$BREW_PATH") == "" || ! -e "$BREW_PATH" ]]
@@ -998,7 +1140,7 @@ then
     CONT_LATEST="no"
     
     env_homebrew_update
-    #
+    
     echo ''
     export INSTALLED_FORMULAE=$(brew list --formula | cat)
     formulae_show_updates_parallel
@@ -1011,9 +1153,11 @@ then
     else
         :
     fi
-    #
+    
     echo ''
-    formulae_install_updates
+    # workaround for issue with brew upgrade command
+    # https://github.com/Homebrew/brew/issues/12034#issuecomment-917261527
+    formulae_install_updates_parallel
     #
     if [[ $(echo "$HOMEBREW_CASK_IS_INSTALLED") == "yes" ]]
     then
@@ -1022,8 +1166,17 @@ then
     else
         :
     fi
-    #
-    echo ''
+    
+    # allowing casks to open
+    if [[ $(echo "$HOMEBREW_CASK_IS_INSTALLED") == "yes" ]]
+    then
+        WHICH_CASKS_TO_ALLOW=list allow_opening_casks
+    else
+        echo ''
+    fi
+    
+    # cleaning up
+    #echo ''
     echo "cleaning up..."
     env_cleanup_all_homebrew & pids+=($!)
     if [[ $(echo "$HOMEBREW_CASK_IS_INSTALLED") == "yes" ]]

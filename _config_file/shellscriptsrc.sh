@@ -302,22 +302,6 @@ env_ask_for_variable() {
 	#echo VARIABLE_TO_CHECK is "$VARIABLE_TO_CHECK"...
 }
 
-#echo ''
-#VARIABLE_TO_CHECK="$PHP_TESTFILES"
-# single line
-#QUESTION_TO_ASK="do you want to install php testfiles? (y/N) "
-# multi line
-#QUESTION_TO_ASK="$(echo -e 'found a backup of cask specifications in /tmp/Caskroom \ndo you wanto to restore /tmp/Caskroom/* to /usr/local/Caskroom/' '(Y/n)? ')"
-#env_ask_for_variable
-#PHP_TESTFILES="$VARIABLE_TO_CHECK"
-
-#if [[ "$PHP_TESTFILES" =~ ^(yes|y)$ ]]
-#then
-#	"echo do it"
-#else
-#	echo "do NOT do it"
-#fi
-
 
 ### updating config file
 env_config_file_self_update() {
@@ -444,6 +428,17 @@ env_get_mounted_disks() {
 env_convert_version_comparable() { echo "$@" | awk -F. '{ printf("%d%02d%02d\n", $1,$2,$3); }'; }
 
 
+### system gui settings app
+VERSION_TO_CHECK_AGAINST=12
+if [[ $(env_convert_version_comparable "$MACOS_VERSION_MAJOR") -le $(env_convert_version_comparable "$VERSION_TO_CHECK_AGAINST") ]]
+then
+    # macos versions until and including 12
+    SYSTEM_GUI_SETTINGS_APP="System Preferences"
+else
+    # macos versions 13 and up
+    SYSTEM_GUI_SETTINGS_APP="System Settings"
+fi
+
 ### paths to applications
 VERSION_TO_CHECK_AGAINST=10.14
 if [[ $(env_convert_version_comparable "$MACOS_VERSION_MAJOR") -le $(env_convert_version_comparable "$VERSION_TO_CHECK_AGAINST") ]]
@@ -455,6 +450,7 @@ else
     # macos versions 10.15 and up
     PATH_TO_SYSTEM_APPS="/System/Applications"
     PATH_TO_APPS="/System/Volumes/Data/Applications"
+    PATH_TO_PREBOOT_APPS="/System/Volumes/Preboot/Cryptexes/App/System/Applications/"
 fi
 
 
@@ -463,8 +459,13 @@ fi
 #/bin/ls -l /dev/console | /usr/bin/awk '{ print $3 }'
 #stat -f%Su /dev/console
 #defaults read /Library/Preferences/com.apple.loginwindow.plist lastUserName
-# recommended way
-loggedInUser=$(/usr/bin/python -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+
+# recommended way, but it seems apple deprecated python2 in macOS 12.3.0
+# to keep on using the python command, a python module is needed
+#pip3 install pyobjc-framework-SystemConfiguration
+#loggedInUser=$(python3 -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+loggedInUser=$(scutil <<< "show State:/Users/ConsoleUser" | awk '/Name :/ && ! /loginwindow/ { print $3 }')
+
 #UNIQUE_USER_ID="$(dscl . -read /Users/$loggedInUser UniqueID | awk '{print $2;}')"
 UNIQUE_USER_ID=$(id -u "$loggedInUser")
 
@@ -675,25 +676,47 @@ env_get_path_to_app() {
         do
             if [[ -e "$i" ]] && [[ "$PATH_TO_APP" == "" ]]
             then
-                PATH_TO_APP=$(mdfind kMDItemContentTypeTree=com.apple.application -onlyin "$i" | grep -i "/$APP_NAME_WITH_EXTENSION$" | sort -n | head -1)
+                PATH_TO_APP=$(mdfind kMDItemContentTypeTree=com.apple.application -onlyin "$i" | grep -i "/$APP_NAME_WITH_EXTENSION$" | sort -n | tail -1)
             fi
             if [[ -e "$i" ]] && [[ "$PATH_TO_APP" == "" ]]
             then
-                PATH_TO_APP=$(find "$i" -mindepth 1 -maxdepth 2 -name "$APP_NAME_WITH_EXTENSION" | sort -n | head -1)
+                PATH_TO_APP=$(find "$i" -mindepth 1 -maxdepth 2 -name "$APP_NAME_WITH_EXTENSION" | sort -n | tail -1)
             fi
         done
-        # pref panes, apps in other apps
-        for i in "/Users/"$USER"/Library/PreferencePanes" "$PATH_TO_APPS"
-        do
-            if [[ -e "$i" ]] && [[ "$PATH_TO_APP" == "" ]]
-            then
-                PATH_TO_APP=$(mdfind kMDItemContentTypeTree=com.apple.application -onlyin "$i" | grep -i "/$APP_NAME_WITH_EXTENSION$" | sort -n | head -1)
-            fi
-            if [[ -e "$i" ]] && [[ "$PATH_TO_APP" == "" ]]
-            then
-                PATH_TO_APP=$(find "$i" -mindepth 2 -name "$APP_NAME_WITH_EXTENSION" | sort -n | head -1)
-            fi
-        done
+        # pref panes, apps in other apps, homebrew apps
+        #echo ''
+        if command -v brew &> /dev/null
+        then
+            # installed
+            #echo "homebrew already installed..."
+            for i in "/Users/"$USER"/Library/PreferencePanes" "$PATH_TO_APPS" "$(brew --prefix)/Caskroom"
+            do
+                if [[ -e "$i" ]] && [[ "$PATH_TO_APP" == "" ]]
+                then
+                    PATH_TO_APP=$(mdfind kMDItemContentTypeTree=com.apple.application -onlyin "$i" | grep -i "/$APP_NAME_WITH_EXTENSION$" | sort -n | tail -1)
+                fi
+                if [[ -e "$i" ]] && [[ "$PATH_TO_APP" == "" ]]
+                then
+                    PATH_TO_APP=$(find "$i" -mindepth 2 -name "$APP_NAME_WITH_EXTENSION" | sort -n | tail -1)
+                fi
+            done  
+        else
+            # not installed
+            #echo "homebrew is not installed, skipping search in homebrew directory..."
+            for i in "/Users/"$USER"/Library/PreferencePanes" "$PATH_TO_APPS"
+            do
+                if [[ -e "$i" ]] && [[ "$PATH_TO_APP" == "" ]]
+                then
+                    PATH_TO_APP=$(mdfind kMDItemContentTypeTree=com.apple.application -onlyin "$i" | grep -i "/$APP_NAME_WITH_EXTENSION$" | sort -n | tail -1)
+                fi
+                if [[ -e "$i" ]] && [[ "$PATH_TO_APP" == "" ]]
+                then
+                    PATH_TO_APP=$(find "$i" -mindepth 2 -name "$APP_NAME_WITH_EXTENSION" | sort -n | tail -1)
+                fi
+            done
+        fi
+        
+
         while [[ "$PATH_TO_APP" == "" ]]
         do
             # bash builtin printf can not print floating numbers
@@ -732,27 +755,32 @@ env_get_app_id() {
     #    :
     #fi
     
-    env_get_path_to_app
-    if [[ "$PATH_TO_APP" == "" ]]
+    if [[ "$APP_NAME" == "com.apple.screensharing.agent" ]]
     then
-        # trying another way to get the app id without knowing the path to the .app
-        APP_ID=$(osascript -e "id of app \"$APP_NAME\"") &> /dev/null
-        if [[ "$APP_ID" == "" ]];then echo "PATH_TO_APP of "$APP_NAME" is empty, skipping entry..." && continue; fi
-    else  
-        if [[ "$APP_NAME" == "PVGuard" ]] && [[ -e ~/.cache/icedtea-web/jvm-cache/cache.json ]] && [[ -e "$PATH_TO_APPS"/"$APP_NAME".app ]]
-        then 
-            JAVA_VERSION=$(jq -r '.runtimes | .[] | .version' ~/.cache/icedtea-web/jvm-cache/cache.json)
-            APP_ID=net.java.openjdk."$JAVA_VERSION".java
-        else       
-            APP_ID=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' ""$PATH_TO_APP"/Contents/Info.plist")
-            #local APP_ID=$(APP_NAME2="${APP_NAME//\'/\'}.app"; APP_NAME2=${APP_NAME2//"/\\"}; APP_NAME2=${APP_NAME2//\\/\\\\}; mdls -name kMDItemCFBundleIdentifier -raw "$(mdfind 'kMDItemContentType==com.apple.application-bundle&&kMDItemFSName=="'"$APP_NAME2"'"' | sort -n | head -n1)")
-            # specifying app id in array
-            #local APP_ID=$(echo "$APP_ENTRY" | awk '{gsub("\t","  ",$0); print;}' | awk -F ' \{2,\}' '{print $2}' | sed 's/^[[:space:]]*//g' | sed -e 's/[[:space:]]*$//g')
+        APP_ID="com.apple.screensharing.agent"
+    else
+        env_get_path_to_app
+        if [[ "$PATH_TO_APP" == "" ]]
+        then
+            # trying another way to get the app id without knowing the path to the .app
+            APP_ID=$(osascript -e "id of app \"$APP_NAME\"") &> /dev/null
+            if [[ "$APP_ID" == "" ]];then echo "PATH_TO_APP of "$APP_NAME" is empty, skipping entry..." && continue; fi
+        else  
+            if [[ "$APP_NAME" == "PVGuard" ]] && [[ -e ~/.cache/icedtea-web/jvm-cache/cache.json ]] && [[ -e "$PATH_TO_APPS"/"$APP_NAME".app ]]
+            then 
+                JAVA_VERSION=$(jq -r '.runtimes | .[] | .version' ~/.cache/icedtea-web/jvm-cache/cache.json)
+                APP_ID=net.java.openjdk."$JAVA_VERSION".java
+            else       
+                APP_ID=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' ""$PATH_TO_APP"/Contents/Info.plist")
+                #local APP_ID=$(APP_NAME2="${APP_NAME//\'/\'}.app"; APP_NAME2=${APP_NAME2//"/\\"}; APP_NAME2=${APP_NAME2//\\/\\\\}; mdls -name kMDItemCFBundleIdentifier -raw "$(mdfind 'kMDItemContentType==com.apple.application-bundle&&kMDItemFSName=="'"$APP_NAME2"'"' | sort -n | head -n1)")
+                # specifying app id in array
+                #local APP_ID=$(echo "$APP_ENTRY" | awk '{gsub("\t","  ",$0); print;}' | awk -F ' \{2,\}' '{print $2}' | sed 's/^[[:space:]]*//g' | sed -e 's/[[:space:]]*$//g')
+            fi
         fi
+        #echo "PATH_TO_APP is "$PATH_TO_APP"..."
+        #echo "APP_ID is "$APP_ID""
+        if [[ "$APP_ID" == "" ]];then echo "APP_ID of "$APP_NAME" is empty, skipping entry..." && continue; fi
     fi
-    #echo "PATH_TO_APP is "$PATH_TO_APP"..."
-    #echo "APP_ID is "$APP_ID""
-    if [[ "$APP_ID" == "" ]];then echo "APP_ID of "$APP_NAME" is empty, skipping entry..." && continue; fi
 }
 
 
@@ -787,13 +815,18 @@ env_add_startup_items() {
 		local START_HIDDEN=$(echo "$i" | awk '{gsub("\t","  ",$0); print;}' | awk -F ' \{2,\}' '{print $2}' | sed 's/^[[:space:]]*//g' | sed -e 's/[[:space:]]*$//g')
        	#echo "START_HIDDEN is "$START_HIDDEN"..."
        	env_get_path_to_app
-		if [[ "$PATH_TO_APP" != "" ]]
-		then
-		    # osascript -e 'tell application "System Events" to make login item at end with properties {name:"name", path:"/path/to/itemname", hidden:false}'
-            osascript -e 'tell application "System Events" to make login item at end with properties {name:"'$APP_NAME'", path:"'$PATH_TO_APP'", hidden:"'$START_HIDDEN'"}'
-        else
-        	echo ""$APP_NAME" not found, skipping..."
-        fi
+       	if [[ $(osascript -e 'tell application "System Events" to get the name of every login item' | tr "," "\n" | sed 's/^[[:space:]]*//g' | sed -e 's/[[:space:]]*$//g' | grep -w "$APP_NAME") == "" ]]
+       	then
+           	if [[ "$PATH_TO_APP" != "" ]]
+    		then
+    		    # osascript -e 'tell application "System Events" to make login item at end with properties {name:"name", path:"/path/to/itemname", hidden:false}'
+                osascript -e 'tell application "System Events" to make login item at end with properties {name:"'$APP_NAME'", path:"'$PATH_TO_APP'", hidden:"'$START_HIDDEN'"}'
+            else
+            	echo ""$APP_NAME" not found, skipping..."
+            fi
+       	else
+       	    echo ""$APP_NAME" already in autostart entries, skipping..."
+       	fi       	     
 	done <<< "$(printf "%s\n" "${AUTOSTART_ITEMS[@]}")"
 }
 
@@ -822,7 +855,7 @@ env_set_apps_security_permissions() {
 
         APP_NAME="$APP_NAME"
         env_get_app_id
-
+            
         # app csreq
         #local APP_CSREQ=$(cat "$SCRIPT_DIR_PROFILES"/"$APP_NAME".txt | sed -n '3p' | sed 's/^[[:space:]]*//g' | sed -e 's/[[:space:]]*$//g')    
         #echo "$APP_CSREQ"
@@ -838,7 +871,7 @@ env_set_apps_security_permissions() {
         #echo "$PERMISSION_GRANTED"
 
         # setting permissions
-        if [[ "$INPUT_SERVICE" == "kTCCServiceAccessibility" ]] || [[ "$INPUT_SERVICE" == "kTCCServiceScreenCapture" ]] || [[ "$INPUT_SERVICE" == "kTCCServiceSystemPolicyAllFiles" ]] || [[ "$INPUT_SERVICE" == "kTCCServiceDeveloperTool" ]]
+        if [[ "$INPUT_SERVICE" == "kTCCServiceAccessibility" ]] || [[ "$INPUT_SERVICE" == "kTCCServiceScreenCapture" ]] || [[ "$INPUT_SERVICE" == "kTCCServiceSystemPolicyAllFiles" ]] || [[ "$INPUT_SERVICE" == "kTCCServiceDeveloperTool" ]] || [[ "$INPUT_SERVICE" == "kTCCServicePostEvent" ]]
         then
             # delete entry before resetting
             sudo sqlite3 "$DATABASE_SYSTEM" "delete from access where (service='$INPUT_SERVICE' and client='$APP_ID');" 2>&1 | grep -v '^$'
@@ -855,9 +888,9 @@ env_set_apps_security_permissions() {
                 sudo sqlite3 "$DATABASE_SYSTEM" "REPLACE INTO access VALUES('$INPUT_SERVICE','$APP_ID',0,$PERMISSION_GRANTED,1,NULL,NULL,NULL,?,NULL,0,?);" 2>&1 | grep -v '^$'
                 # working with csreq
                 #sudo sqlite3 "$DATABASE_SYSTEM" "REPLACE INTO access VALUES('"$INPUT_SERVICE"','"$APP_ID"',0,$PERMISSION_GRANTED,1,NULL,NULL,NULL,$APP_CSREQ,NULL,0,?);"
-            elif VERSION_TO_CHECK_AGAINST=11; [[ $(env_convert_version_comparable "$MACOS_VERSION_MAJOR") -ge $(env_convert_version_comparable "$VERSION_TO_CHECK_AGAINST") ]]
+            elif [[ $(env_convert_version_comparable "$MACOS_VERSION_MAJOR") -ge $(env_convert_version_comparable 11) ]] && [[ $(env_convert_version_comparable "$MACOS_VERSION_MAJOR") -le $(env_convert_version_comparable 13) ]]
             then
-                # macos 11 and higher
+                # macos 11 to 13
                 if [[ $PERMISSION_GRANTED == "0" ]]
                 then
                     :
@@ -869,6 +902,17 @@ env_set_apps_security_permissions() {
                 sudo sqlite3 "$DATABASE_SYSTEM" "REPLACE INTO access VALUES('$INPUT_SERVICE','$APP_ID',0,$PERMISSION_GRANTED,4,1,NULL,NULL,NULL,?,NULL,0,?);" 2>&1 | grep -v '^$'
                 # working with csreq
                 #sudo sqlite3 "$DATABASE_SYSTEM" "REPLACE INTO access VALUES('"$INPUT_SERVICE"','"$APP_ID"',0,$PERMISSION_GRANTED,4,1,NULL,NULL,NULL,$APP_CSREQ,NULL,0,?);"
+            elif VERSION_TO_CHECK_AGAINST=14; [[ $(env_convert_version_comparable "$MACOS_VERSION_MAJOR") -ge $(env_convert_version_comparable "$VERSION_TO_CHECK_AGAINST") ]]
+            then
+                # macos 14 and higher
+                if [[ $PERMISSION_GRANTED == "0" ]]
+                then
+                    :
+                elif [[ $PERMISSION_GRANTED == "1" ]]
+                then
+                    PERMISSION_GRANTED=2
+                fi
+                sudo sqlite3 "$DATABASE_SYSTEM" "REPLACE INTO access VALUES('$INPUT_SERVICE','$APP_ID',0,$PERMISSION_GRANTED,4,1,?,NULL,0,'UNUSED',NULL,0,?,NULL,NULL,'UNUSED',?);"
             else
                 echo ''
                 echo "setting security permissions for this version of macos is not supported, skipping..."
@@ -889,7 +933,7 @@ env_set_apps_security_permissions() {
                 sqlite3 "$DATABASE_USER" "REPLACE INTO access VALUES('$INPUT_SERVICE','$APP_ID',0,$PERMISSION_GRANTED,1,?,NULL,NULL,?,NULL,NULL,?);" 2>&1 | grep -v '^$'
                 # working with csreq
                 #sqlite3 "$DATABASE_USER" "REPLACE INTO access VALUES('"$INPUT_SERVICE"','"$APP_ID"',0,$PERMISSION_GRANTED,1,$APP_CSREQ,NULL,NULL,?,NULL,NULL,?);"
-            elif VERSION_TO_CHECK_AGAINST=11; [[ $(env_convert_version_comparable "$MACOS_VERSION_MAJOR") -ge $(env_convert_version_comparable "$VERSION_TO_CHECK_AGAINST") ]]
+            elif [[ $(env_convert_version_comparable "$MACOS_VERSION_MAJOR") -ge $(env_convert_version_comparable 11) ]] && [[ $(env_convert_version_comparable "$MACOS_VERSION_MAJOR") -le $(env_convert_version_comparable 13) ]]
             then
                 # macos 11 and higher
                 if [[ $PERMISSION_GRANTED == "0" ]]
@@ -903,6 +947,17 @@ env_set_apps_security_permissions() {
                 sqlite3 "$DATABASE_USER" "REPLACE INTO access VALUES('$INPUT_SERVICE','$APP_ID',0,$PERMISSION_GRANTED,4,1,?,NULL,NULL,?,NULL,NULL,?);" 2>&1 | grep -v '^$'
                 # working with csreq
                 #sqlite3 "$DATABASE_USER" "REPLACE INTO access VALUES('"$INPUT_SERVICE"','"$APP_ID"',0,$PERMISSION_GRANTED,4,1,$APP_CSREQ,NULL,NULL,?,NULL,NULL,?);"
+            elif VERSION_TO_CHECK_AGAINST=14; [[ $(env_convert_version_comparable "$MACOS_VERSION_MAJOR") -ge $(env_convert_version_comparable "$VERSION_TO_CHECK_AGAINST") ]]
+            then
+                # macos 14 and higher
+                if [[ $PERMISSION_GRANTED == "0" ]]
+                then
+                    :
+                elif [[ $PERMISSION_GRANTED == "1" ]]
+                then
+                    PERMISSION_GRANTED=2
+                fi
+                sqlite3 "$DATABASE_USER" "REPLACE INTO access VALUES('$INPUT_SERVICE','$APP_ID',0,$PERMISSION_GRANTED,4,1,?,NULL,0,'UNUSED',NULL,0,?,NULL,NULL,'UNUSED',?);" 2>&1 | grep -v '^$'
             else
                 echo ''
                 echo "setting security permissions for this version of macos is not supported, skipping..."
@@ -1045,11 +1100,11 @@ env_set_apps_automation_permissions() {
             #echo "$PERMISSION_GRANTED"
             
             ### setting permissions
-            # working, but does not show in gui of system preferences, use csreq for the entry to make it work and show
+            # working, but does not show in gui, use csreq for the entry to make it work and show
             #sqlite3 "$DATABASE_USER" "REPLACE INTO access VALUES('kTCCServiceAppleEvents','$SOURCE_APP_ID',0,$PERMISSION_GRANTED,1,?,NULL,0,'$AUTOMATED_APP_ID',?,NULL,?);"
-            # not working, but shows correct entry in gui of system preferences, use csreq to make it work and show
+            # not working, but shows correct entry in gui, use csreq to make it work and show
             #sqlite3 "$DATABASE_USER" "REPLACE INTO access VALUES('kTCCServiceAppleEvents','$SOURCE_APP_ID',0,$PERMISSION_GRANTED,1,'UNUSED',NULL,0,'$AUTOMATED_APP_ID','UNUSED',NULL,?);"
-            # working and showing in gui of system preferences when using correct values in CSREQ variables
+            # working and showing in gui when using correct values in CSREQ variables
             #sqlite3 "$DATABASE_USER" "REPLACE INTO access VALUES('kTCCServiceAppleEvents','$SOURCE_APP_ID',0,$PERMISSION_GRANTED,1,$SOURCE_APP_CSREQ,NULL,0,'$AUTOMATED_APP_ID',$AUTOMATED_APP_CSREQ,NULL,?);"
             
             # delete entry before resetting
@@ -1060,10 +1115,11 @@ env_set_apps_automation_permissions() {
             if [[ $(env_convert_version_comparable "$MACOS_VERSION_MAJOR") -le $(env_convert_version_comparable "$VERSION_TO_CHECK_AGAINST") ]]
             then
                 # macos versions until and including 10.15
-                # working and showing in gui of system preferences if csreq is not '?'
+                # working and showing in gui if csreq is not '?'
                 sqlite3 "$DATABASE_USER" "REPLACE INTO access VALUES('kTCCServiceAppleEvents','$SOURCE_APP_ID',0,$PERMISSION_GRANTED,1,$SOURCE_APP_CSREQ,NULL,0,'$AUTOMATED_APP_ID',$AUTOMATED_APP_CSREQ,NULL,?);"
-            else
-                # macos version 11 and higher
+            elif [[ $(env_convert_version_comparable "$MACOS_VERSION_MAJOR") -ge $(env_convert_version_comparable 11) ]] && [[ $(env_convert_version_comparable "$MACOS_VERSION_MAJOR") -le $(env_convert_version_comparable 13) ]]
+            then
+                # macos version 11 to 13
                 if [[ $PERMISSION_GRANTED == "0" ]]
                 then
                     :
@@ -1072,6 +1128,17 @@ env_set_apps_automation_permissions() {
                     PERMISSION_GRANTED=2
                 fi
                 sqlite3 "$DATABASE_USER" "REPLACE INTO access VALUES('kTCCServiceAppleEvents','$SOURCE_APP_ID',0,$PERMISSION_GRANTED,4,1,$SOURCE_APP_CSREQ,NULL,0,'$AUTOMATED_APP_ID',$AUTOMATED_APP_CSREQ,NULL,?);"
+            elif VERSION_TO_CHECK_AGAINST=14; [[ $(env_convert_version_comparable "$MACOS_VERSION_MAJOR") -ge $(env_convert_version_comparable "$VERSION_TO_CHECK_AGAINST") ]]
+            then
+                # macos version 14 and higher
+                if [[ $PERMISSION_GRANTED == "0" ]]
+                then
+                    :
+                elif [[ $PERMISSION_GRANTED == "1" ]]
+                then
+                    PERMISSION_GRANTED=2
+                fi
+                sqlite3 "$DATABASE_USER" "REPLACE INTO access VALUES('kTCCServiceAppleEvents','$SOURCE_APP_ID',0,$PERMISSION_GRANTED,4,1,$SOURCE_APP_CSREQ,NULL,0,'$AUTOMATED_APP_ID',$AUTOMATED_APP_CSREQ,NULL,?,NULL,NULL,'UNUSED',?);"
             fi
             
             ### print line
@@ -1406,7 +1473,10 @@ env_start_sudo() {
         env_enter_sudo_password
     fi
     env_use_password | builtin command sudo -p '' -S -v
-    ( while true; do env_use_password | builtin command sudo -p '' -S -v; sleep 60; done; ) &
+    #( while true; do env_use_password | builtin command sudo -p '' -S -v; sleep 60; done; ) &
+    #
+    #while true; do env_use_password | builtin command sudo -p '' -S -v; sleep 60; done &
+    ( while true; do sleep 60; sudo -n true; kill -0 "$$" || exit; done 2>/dev/null ) &
     SUDO_PID="$!"
     #echo "SUDO PID is $SUDO_PID..." 
 }
@@ -1443,7 +1513,14 @@ env_stop_sudo() {
 
 ### homebrew
 # including homebrew commands in PATH
-PATH_TO_SET='/usr/local/bin:/usr/local/sbin:/usr/local/opt/openssl@1.1/bin:$PATH'
+if [[ $(uname -m | grep arm) != "" ]]
+then
+	# arm mac
+	PATH_TO_SET='/opt/homebrew/bin:/opt/homebrew/sbin:$PATH'
+else
+	# intel mac
+	PATH_TO_SET='/usr/local/bin:/usr/local/sbin:/usr/local/opt/openssl@1.1/bin:$PATH'
+fi
 
 env_set_default_paths() { 
     echo "setting default paths in /etc/paths/..."   
@@ -1461,7 +1538,7 @@ env_add_path_to_shell() {
     echo 'export PATH="'"$PATH_TO_SET"'"' >> "$SHELL_CONFIG"
     if [[ "$SET_HOMEBREW_GITHUB_API_TOKEN" == "yes" ]]
     then
-        echo 'export HOMEBREW_GITHUB_API_TOKEN=$(security find-generic-password -s "GitHub - https://api.github.com" -w)' >> "$SHELL_CONFIG"
+        echo 'export HOMEBREW_GITHUB_API_TOKEN=$(security find-generic-password -s "GitHub - https://api.github.com" -w) >/dev/null 2>&1' >> "$SHELL_CONFIG"
     else
         :
     fi
@@ -1506,35 +1583,12 @@ env_get_current_command_line_tools_version() {
 }
 
 env_check_for_software_updates_gui() {
-    # getting ids of all system preferences panes
-    #osascript <<EOF
-    #tell application "System Preferences"
-    #	id of panes
-    #end tell
-#EOF
-    
-    # getting id of currently active system preference pane
-    #osascript <<EOF
-    #tell application "System Preferences"
-    #	set CurrentPane to the id of the current pane
-    #	display dialog CurrentPane
-    #end tell
-#EOF
+
+    open /System/Library/PreferencePanes/SoftwareUpdate.prefPane
+    sleep 30
     
     osascript <<EOF
-        tell application "System Preferences"
-        	# activate opens in foreground, run in background
-        	#activate
-        	run
-        	delay 1
-        	set current pane to pane "com.apple.preferences.softwareupdate"
-        end tell
-        #delay 5
-        #tell application "System Events"
-    	#    set visible of process "System Preferences" to false
-        #end tell
-        delay 30
-        tell application "System Preferences" to quit
+        tell application "System Settings" to quit
 EOF
 }
 
@@ -1601,6 +1655,28 @@ env_command_line_tools_install_shell() {
         
         # choosing command line tools as default
         sudo xcode-select --switch /Library/Developer/CommandLineTools
+    fi
+    
+    # installing rosetta on arm macs
+    if [[ $(uname -m | grep arm) != "" ]]
+    then
+        # arm mac
+        if pgrep oahd >/dev/null 2>&1
+        then 
+            # installed
+            :
+        else
+            # not installed
+            echo ''
+            echo "installing rosetta..."
+            #sudo rm -rf /Library/Apple/usr/share/rosetta
+            #sudo rm -rf /Library/Apple/usr/libexec/oah
+            softwareupdate --install-rosetta --agree-to-license
+            echo ''
+        fi
+    else
+        # intel mac
+        :
     fi
 }
 
@@ -1759,9 +1835,10 @@ env_rename_files_and_directories() {
                 find "$RENAME_DIR" -print0 | xargs -0 rename --force 's/ä/ae/g;s/ö/oe/g;s/ü/ue/g;s/Ä/Ae/g;s/Ö/Oe/g;s/Ü/Ue/g;s/ß/ss/g;s/\x61\xcc\x88/ae/g;s/\x6f\xcc\x88/oe/g;s/\x75\xcc\x88/ue/g;s/\x41\xcc\x88/AE/g;s/\x4f\xcc\x88/OE/g;s/\x55\xcc\x88/UE/g;'
                 
                 # sanitizing (problematic if whitespace in path to file or folder)
-                #find "$RENAME_DIR" -print0 | xargs -0 rename --sanitize --keep-extension"
+                find "$RENAME_DIR" -print0 | xargs -0 rename --sanitize --keep-extension
+                #find "$RENAME_DIR" -print0 | xargs -0 rename --noctrl --nometa --trim --keep-extension
                 
-                for RENAME_VAR_REGEX in , '<' '>' » « '(' ')' '\[' '\]' + % @ ® ø · • › … – — ’ ‘ “ ” é ï Ì € Ë â Â ¬ ° ¹ º š Œ ¶ ¼ Æ ƒ ˆ † '\=' '\!' '\|' '\#' '\\~' '\"' '\?' '\¸' '\' '\&' '\§' '\$' '\%' ' ' '\\' ''\''' __
+                for RENAME_VAR_REGEX in , ' ' '<' '>' » « '(' ')' '\[' '\]' + % @ ® ø · • › … – — ’ ‘ “ ” é ï Ì € Ë â Â ¬ ° ¹ º š Œ ¶ ¼ Æ ƒ ˆ † '\=' '\!' '\|' '\#' '\\~' '\"' '\?' '\¸' '\' '\&' '\§' '\$' '\%' ' ' '\\' ''\''' __
                 do
                     NUM1=0
                     #
@@ -1859,11 +1936,6 @@ env_delete_tmp_appstore_mas_script_fifo() {
     fi
 }
 
-env_delete_tmp_mas_script_fifo() {
-    env_delete_tmp_sudo_mas_script_fifo
-    env_delete_tmp_appstore_mas_script_fifo
-}
-
 env_delete_tmp_casks_script_fifo() {
     if [[ -e "/tmp/tmp_sudo_cask_script_fifo" ]]
     then
@@ -1871,6 +1943,11 @@ env_delete_tmp_casks_script_fifo() {
     else
         :
     fi
+}
+
+env_delete_tmp_mas_script_fifo() {
+    env_delete_tmp_sudo_mas_script_fifo
+    env_delete_tmp_appstore_mas_script_fifo
 }
 
 env_create_tmp_batch_script_fifo() {
@@ -1908,6 +1985,8 @@ env_create_tmp_casks_script_fifo() {
 ### permissions for opening on first run
 env_set_open_on_first_run_permissions() {
     env_get_path_to_app
+    echo "$APP_NAME"
+    echo "$PATH_TO_APP"
     #echo "PATH_TO_APP is "$PATH_TO_APP""
     APP_NAME_EXTENSION=$([[ "$APP_NAME" = *.* ]] && echo "${APP_NAME##*.}" || echo '')
     if [[ "$APP_NAME_EXTENSION" == "jar" ]]
@@ -1918,7 +1997,6 @@ env_set_open_on_first_run_permissions() {
         then
             if [[ $(xattr -l "$PATH_TO_APP" | grep com.apple.quarantine) != "" ]]
             then
-                #echo "$PATH_TO_APP"
                 xattr -d com.apple.quarantine "$PATH_TO_APP" &> /dev/null
                 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister -R -f -trusted "$PATH_TO_APP"
             else
@@ -1961,6 +2039,35 @@ env_set_permissions_autostart_apps_sequential() {
         env_set_permissions_autostart_apps "$autostartapp"
     done <<< "$(printf "%s\n" "${AUTOSTART_PERMISSIONS_ITEMS[@]}")"
 }
+
+
+### remove quarantine attribute
+env_remove_quarantine_attribute() {
+	while IFS= read -r line || [[ -n "$line" ]] 
+	do
+	    if [[ "$line" == "" ]]; then continue; fi
+	    i="$line"
+	    if [[ $(xattr -l "$i" | grep com.apple.quarantine) != "" ]]
+	    then
+	        xattr -d com.apple.quarantine "$i"
+	    else
+	        :
+	    fi
+	done <<< "$(find "$DIRECTORY_TO_SEARCH_FOR_QUARANTINE" -mindepth 1 ! -path "*/*.app/*" -name "*.command")"
+	
+	while IFS= read -r line || [[ -n "$line" ]] 
+	do
+	    if [[ "$line" == "" ]]; then continue; fi
+	    i="$line"
+	    if [[ $(xattr -l "$i" | grep com.apple.quarantine) != "" ]]
+	    then
+	        xattr -d com.apple.quarantine "$i"
+	    else
+	        :
+	    fi
+	done <<< "$(find "$DIRECTORY_TO_SEARCH_FOR_QUARANTINE" -mindepth 1 ! -path "*/*.app/*" -name "*.sh")"
+}
+
 
 ### caffeinate
 env_deactivating_caffeinate() {
@@ -2049,6 +2156,13 @@ env_stop_error_log() {
     exec 2>&1
 }
 
+### in addition to showing them in terminal write errors to logfile when run from batch script
+env_force_start_error() {
+    touch "/tmp/batch_script_in_progress"
+    env_check_if_run_from_batch_script
+    if [[ "$RUN_FROM_BATCH_SCRIPT" == "yes" ]]; then env_start_error_log; else :; fi
+}
+
 
 ### user profiles
 env_check_for_user_profile() {
@@ -2075,34 +2189,133 @@ env_check_for_user_profile() {
 
 ### check if run from boot volume
 env_check_if_second_macos_volume_is_mounted() {
-    env_get_mounted_disks
-    if [[ $(printf "%s\n" "${LIST_OF_ALL_MOUNTED_VOLUMES_OUTSIDE_OF_BOOT_VOLUME[@]}" | grep "macintosh_hd") != "" ]]
+
+    env_get_mounted_disks 
+    if [[ "$MACOS_CURRENTLY_BOOTED_VOLUME" == "macintosh_hd2" ]] && [[ $(printf "%s\n" "${LIST_OF_ALL_MOUNTED_VOLUMES_OUTSIDE_OF_BOOT_VOLUME[@]}" | grep -x "/Volumes/macintosh_hd") != "" ]]
     then
-        # second macos volume is mounted
-        output_mas_hint() {
-            echo ''
-            echo "${bold_text}${red_text}important info${default_text}"
-            echo "at least one more macos volume is mounted, due to this bug"
-            echo "https://github.com/mas-cli/mas/issues/250"
-            echo "mas will install appstore apps to first macos partition found, not necessarily to the mounted one..."
-            echo "as a workaround follow these steps:"
-            echo "1   make sure the scripts are stored on the currently booted macos volume,"
-            echo "    if not copy them"
-            echo "2   unmount all other macos volumes"
-            echo "3   run the script again"
-            echo "exiting..."
-            echo ''
-            exit
-        }
-        output_mas_hint >&2
+        #if [[ -e "/Volumes/macintosh_hd" ]]; then sudo diskutil unmount /Volumes/macintosh_hd; fi
+        #if [[ -e "/Volumes/macintosh_hd - Daten" ]]; then sudo diskutil unmount "/Volumes/macintosh_hd - Daten"; fi
+        if [[ -e "/Volumes/macintosh_hd" ]]; then sudo umount -f /Volumes/macintosh_hd; fi
+        if [[ -e "/Volumes/macintosh_hd - Daten" ]]; then sudo umount -f "/Volumes/macintosh_hd - Daten"; fi
+        sleep 5
+        env_get_mounted_disks
+        if [[ $(printf "%s\n" "${LIST_OF_ALL_MOUNTED_VOLUMES_OUTSIDE_OF_BOOT_VOLUME[@]}" | grep -x "/Volumes/macintosh_hd") != "" ]]
+        then
+            # second macos volume is mounted
+            output_mas_hint() {
+                echo ''
+                echo "${bold_text}${red_text}important info${default_text}"
+                echo "at least one more macos volume is mounted, due to this bug"
+                echo "https://github.com/mas-cli/mas/issues/250"
+                echo "mas will install appstore apps to first macos partition found, not necessarily to the mounted one..."
+                echo "as a workaround follow these steps:"
+                echo "1   make sure the scripts are stored on the currently booted macos volume,"
+                echo "    if not copy them"
+                echo "2   unmount all other macos volumes"
+                echo "3   run the script again"
+                echo "exiting..."
+                echo ''
+                exit
+            }
+            output_mas_hint >&2
+        else
+            # second macos volume is not mounted
+            :
+        fi
     else
-        # second macos volume is not mounted
         :
     fi
 }
 
 
-### calendar
+### services
+
+env_stopping_services() {
+	echo ''
+	echo "stopping services..."
+	
+	if [[ "$STOP_CALENDAR_REMINDER_SERVICES" == "yes" ]]
+	then
+		echo "services calendar & reminders..."
+		#osascript -e 'tell application "System Events" to log out'
+		#killall Calendar &> /dev/null
+		#killall dataaccess.dataaccessd
+		#killall remindd
+		#killall calaccessd
+		# launchctl list
+		# already done at the beginnning of the script
+		# bootout works, but prints "Boot-out failed: 36: Operation now in progress"
+		# if kill is used to stop the service kickstart is needed to restart it, bootstrap will not work
+		launchctl bootout gui/"$(id -u "$USER")"/com.apple.dataaccess.dataaccessd 2>&1 | grep -v "in progress" | grep -v "No such process"
+		launchctl bootout gui/"$(id -u "$USER")"/com.apple.remindd 2>&1 | grep -v "in progress" | grep -v "No such process"
+		launchctl bootout gui/"$(id -u "$USER")"/com.apple.calaccessd 2>&1 | grep -v "in progress" | grep -v "No such process"
+		#launchctl kill 15 gui/"$(id -u "$USER")"/com.apple.dataaccess.dataaccessd
+		#launchctl kill 15 gui/"$(id -u "$USER")"/com.apple.remindd
+		#launchctl kill 15 gui/"$(id -u "$USER")"/com.apple.CalendarAgent
+	else
+		:
+	fi
+	
+	if [[ "$STOP_ACCOUNTSD" == "yes" ]]
+	then
+		echo "services accountsd..."
+		launchctl bootout gui/"$(id -u "$USER")"/com.apple.accountsd 2>&1 | grep -v "in progress" | grep -v "No such process"
+	else
+		:
+	fi
+	
+	if [[ "$STOP_CUPSD" == "yes" ]]
+	then
+		echo "services cupsd..."		
+		sudo launchctl bootout system/org.cups.cupsd 2>&1 | grep -v "in progress" | grep -v "No such process"
+	else
+		:
+	fi
+	
+	sleep 5
+}
+
+env_starting_services() {
+	echo ''
+	echo "starting services..."
+	
+	if [[ "$START_CALENDAR_REMINDER_SERVICES" == "yes" ]]
+	then
+		echo "services calendar & reminders..."
+		# if kill was used to stop the service kickstart is needed to restart it, bootstrap will not work
+		# dataaccessd is needed to be restared for calendar to reconize the internet accounts and re-download the data
+		launchctl bootstrap gui/"$(id -u "$USER")" /System/Library/LaunchAgents/com.apple.dataaccess.dataaccessd.plist
+		launchctl bootstrap gui/"$(id -u "$USER")" /System/Library/LaunchAgents/com.apple.remindd.plist
+		launchctl bootstrap gui/"$(id -u "$USER")" /System/Library/LaunchAgents/com.apple.calaccessd.plist
+		#launchctl kickstart -k gui/"$(id -u "$USER")"/com.apple.dataaccess.dataaccessd
+		#launchctl kickstart -k gui/"$(id -u "$USER")"/com.apple.remindd
+		launchctl kickstart -k gui/"$(id -u "$USER")"/com.apple.calaccessd
+	else
+		:
+	fi
+
+	if [[ "$START_ACCOUNTSD" == "yes" ]]
+	then
+		echo "services accountsd..."		
+		launchctl bootstrap gui/"$(id -u "$USER")" /System/Library/LaunchAgents/com.apple.accountsd.plist
+		#launchctl kickstart -k gui/"$(id -u "$USER")"/com.apple.accountsd
+	else
+		:
+	fi
+
+	if [[ "$START_CUPSD" == "yes" ]]
+	then
+		echo "services cupsd..."		
+		sudo launchctl bootstrap system /System/Library/LaunchDaemons/org.cups.cupsd.plist
+	else
+		:
+	fi
+	
+	sleep 5
+}
+
+
+### calendar - deprectaed for macos 13 and higher
 env_collapsing_elements_in_calendar_sidebar() {
     # collapsing (specified) elements in the sidebar
     # delegates

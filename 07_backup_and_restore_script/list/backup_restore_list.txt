@@ -1,3 +1,6 @@
+# have a look at mackup for more application settings
+# https://github.com/lra/mackup
+
 # 2Do
 #echo 2Do
 #u	"$PATH_TO_APPS"/2Do.app
@@ -39,12 +42,19 @@ u	~/Library/Application Support/Adobe/Adobe PDF/Settings/ebook.joboptions
 
 # Affinity
 echo Affinity
-u	~/Library/Containers/com.seriflabs.affinitypublisher/Data/Library/Application Support/user/file_export_options.dat
-u	~/Library/Containers/com.seriflabs.affinitypublisher/Data/Library/Preferences/com.seriflabs.affinitypublisher.plist
-u	~/Library/Containers/com.seriflabs.affinitydesigner/Data/Library/Application Support/user/file_export_options.dat
-u	~/Library/Containers/com.seriflabs.affinitydesigner/Data/Library/Preferences/com.seriflabs.affinitydesigner.plist
-u	~/Library/Containers/com.seriflabs.affinityphoto/Data/Library/Application Support/user/file_export_options.dat
-u	~/Library/Containers/com.seriflabs.affinityphoto/Data/Library/Preferences/com.seriflabs.affinityphoto.plist
+#u	~/Library/Containers/com.seriflabs.affinitypublisher/Data/Library/Application Support/user/file_export_options.dat
+#u	~/Library/Containers/com.seriflabs.affinitypublisher/Data/Library/Preferences/com.seriflabs.affinitypublisher.plist
+#u	~/Library/Containers/com.seriflabs.affinitydesigner/Data/Library/Application Support/user/file_export_options.dat
+#u	~/Library/Containers/com.seriflabs.affinitydesigner/Data/Library/Preferences/com.seriflabs.affinitydesigner.plist
+#u	~/Library/Containers/com.seriflabs.affinityphoto/Data/Library/Application Support/user/file_export_options.dat
+#u	~/Library/Containers/com.seriflabs.affinityphoto/Data/Library/Preferences/com.seriflabs.affinityphoto.plist
+u	~/Library/Containers/com.seriflabs.affinitypublisher2/Data/Library/Application Support/user/file_export_options.dat
+u	~/Library/Containers/com.seriflabs.affinitypublisher2/Data/Library/Preferences/com.seriflabs.affinitypublisher2.plist
+u	~/Library/Containers/com.seriflabs.affinitydesigner2/Data/Library/Application Support/user/file_export_options.dat
+u	~/Library/Containers/com.seriflabs.affinitydesigner2/Data/Library/Preferences/com.seriflabs.affinitydesigner2.plist
+u	~/Library/Containers/com.seriflabs.affinityphoto2/Data/Library/Application Support/user/file_export_options.dat
+u	~/Library/Containers/com.seriflabs.affinityphoto2/Data/Library/Preferences/com.seriflabs.affinityphoto2.plist
+u	~/Library/Group Containers/6LVTQB9699.com.seriflabs/v2
 
 # Alfred
 echo Alfred
@@ -114,6 +124,11 @@ echo Bartender
 #u	"$PATH_TO_APPS"/Bartender 3.app
 u	~/Library/Preferences/com.surteesstudios.Bartender.plist
 
+# BetterTouchTool
+echo BetterTouchTool
+u	~/Library/Application Support/BetterTouchTool
+u	~/Library/Preferences/com.hegenberg.BetterTouchTool.plist
+
 # BBEdit
 echo BBEdit
 #u	"$PATH_TO_APPS"/BBEdit.app
@@ -155,9 +170,14 @@ u	~/Library/Calendars
 
 # Chromium
 echo Chromium
-#u	"$PATH_TO_APPS"/Chromium.app
-#u	"$PATH_TO_APPS"/chromium
-#u	~/Library/Application Support/Chromium
+u	~/Library/Application Support/Chromium/Local State
+u	~/Library/Application Support/Chromium/Default/Extension Rules
+u	~/Library/Application Support/Chromium/Default/Extension Scripts
+u	~/Library/Application Support/Chromium/Default/Extension State
+u	~/Library/Application Support/Chromium/Default/Extensions
+u	~/Library/Application Support/Chromium/Default/Local Extension Settings
+u	~/Library/Application Support/Chromium/Default/Preferences
+u	~/Library/Application Support/Chromium/Default/Secure Preferences
 
 # clamav scan
 echo clamav scan
@@ -181,6 +201,9 @@ echo Commander One
 #u	"$PATH_TO_APPS"/Commander One.app
 u	~/Library/Preferences/com.eltima.cmd1.plist
 
+# Command X
+u	~/Library/Containers/com.sindresorhus.Command-X/Data/Library/Preferences/com.sindresorhus.Command-X.plist
+
 # CotEditor
 echo CotEditor
 #u	"$PATH_TO_APPS"/CotEditor.app
@@ -199,15 +222,15 @@ u	~/Library/Group Containers/G69SCX94XU.duck
 u	~/Library/Preferences/ch.sudo.cyberduck.plist
 
 # Dashboard
-echo Dashboard
-u	~/Library/Preferences/com.apple.dashboard.client.plist
-u	~/Library/Preferences/com.apple.dashboard.plist
-u	~/Library/Preferences/widget-com.apple.widget.calendar.plist
+#echo Dashboard
+#u	~/Library/Preferences/com.apple.dashboard.client.plist
+#u	~/Library/Preferences/com.apple.dashboard.plist
+#u	~/Library/Preferences/widget-com.apple.widget.calendar.plist
 #u	~/Library/Preferences/widget-com.apple.widget.stocks.plist
 #u	~/Library/Preferences/widget-com.apple.widget.translation.plist
 #u	~/Library/Preferences/widget-com.apple.widget.unitconverter.plist
-u	~/Library/Preferences/widget-com.apple.widget.weather.plist
-u	~/Library/Preferences/widget-ws.merl.widget.wetter.plist
+#u	~/Library/Preferences/widget-com.apple.widget.weather.plist
+#u	~/Library/Preferences/widget-ws.merl.widget.wetter.plist
 
 # Defaults open with
 echo Defaults open with
@@ -266,6 +289,10 @@ echo Firefox
 u	"$PATH_TO_APPS"/Firefox_ESR.app
 u	~/Library/Application Support/Firefox
 u	~/Library/Preferences/org.mozilla.firefox.plist
+
+# Firewall Temp Off App
+echo Firewall Temp Off App
+u	"$PATH_TO_APPS"/firewall_temp_off.app
 
 # Fonts
 echo Fonts
@@ -376,8 +403,13 @@ u	~/Library/Application Support/Java
 # Jitsi Meet
 echo Jitsi Meet
 u	~/Library/Application Support/Jitsi Meet/config.json
+u	~/Library/Application Support/Jitsi Meet/Local Storage
 u	~/Library/Application Support/Jitsi Meet/Preferences
 u	~/Library/Application Support/Jitsi Meet/window-state.json
+
+# JLohn
+echo JLohn
+u	/Applications/JLohnMacOS.app
 
 # KeePassX
 echo KeePassX
@@ -419,7 +451,7 @@ u	~/Library/Application Support/LibreOffice/4/user/registrymodifications.xcu
 # Linphone
 echo Linphone
 #u	"$PATH_TO_APPS"/Linphone.app
-u	~/Library/Preferences/org.linphone.linphone.linphone.plist
+u	~/Library/Preferences/com.linphone.linphone.plist
 u	~/Library/Preferences/linphone/linphonerc
 u	~/Library/Application Support/linphone
 u	~/Library/Sounds/incomingCall.wav
@@ -462,27 +494,30 @@ u	~/Library/Group Containers/UBF8T346G9.Office
 # relinking ~/Library/Group Containers/UBF8T346G9.Office/MicrosoftRegistrationDB.reg is done in 11k_third_party_app_preferences.sh
 
 # MonKey Office
-echo MonKey Office 2021
-u	"$PATH_TO_APPS"/MonKey Office 2021.app
+echo MonKey Office 2023
+u	"$PATH_TO_APPS"/MonKey Office 2023.app
 u	~/Library/Application Support/ProSaldo
-#u	~/Library/Preferences/com.prosaldo.monkeyoffice2021.plist
+#u	~/Library/Preferences/com.prosaldo.monkeyoffice2023.plist
 
 # muCommander
 echo muCommander
 #u	"$PATH_TO_APPS"/muCommander.app
 u	~/Library/Preferences/muCommander
 
-# mysides
-#echo mysides
-#u	/usr/local/bin/mysides
-
 # NameChanger
-#echo NameChanger
+echo NameChanger
 #u	"$PATH_TO_APPS"/NameChanger.app
+u	~/Library/Application Support/NameChanger
 
 # Nextcloud
 echo Nextcloud
 u	~/Library/Application Support/Nextcloud
+
+# Notification Center Widgets
+echo Notification Center Widgets
+u	/Library/Containers/com.apple.weather.WeatherIntents/Data/Library/SyncedPreferences/com.apple.kvs/ChangeTokens/EndToEndEncryption/WeatherIntents/com.apple.weather
+u	~/Library/Containers/com.apple.weather.WeatherIntents/Data/Library/SyncedPreferences/com.apple.kvs/ChangeTokens/NoEncryption/WeatherIntents/com.apple.weather
+u	~/Library/Containers/com.apple.notificationcenterui/Data/Library/Preferences/com.apple.notificationcenterui.plist
 
 # Ondesoft AudioBook Converter
 echo Ondesoft AudioBook Converter
@@ -507,7 +542,7 @@ u	~/Library/Preferences/com.titanium.OnyX.plist
 
 # Overflow 3
 echo Overflow 3
-#u	"$PATH_TO_APPS"/Overflow 3.app
+u	"$PATH_TO_APPS"/Overflow 3.app
 u	~/Library/Containers/com.stuntsoftware.Overflow3/Data/Library/Preferences/com.stuntsoftware.Overflow3.plist
 u	~/Library/Containers/com.stuntsoftware.Overflow3/Data/Library/Application Support/default.realm
 
@@ -545,6 +580,10 @@ u	"$PATH_TO_APPS"/pdf_200dpi_shrink.app
 #u	"$PATH_TO_APPS"/pdf_ebook_shrink.app
 #u	"$PATH_TO_APPS"/pdf_printer_shrink.app
 
+# pages_to_print_pdf
+echo pages to print pdf
+u	"$PATH_TO_APPS"/pages_to_pdf_print_droplet.app
+
 # PDF Unlock
 #echo PDF Unlock
 #u	"$PATH_TO_APPS"/PDF Unlock.app
@@ -575,10 +614,13 @@ echo Printers
 u 	~/.cups/lpoptions
 u	~/Library/Printers/
 u	~/Library/Preferences/com.apple.print.custompresets.forprinter.canon_ir_adv_c3325if.plist
+u	~/Library/Preferences/com.apple.print.custompresets.forprinter.canon_ir_adv_dx_c3926i.plist
 #u	~/Library/Preferences/com.apple.print.custompapers.plist
 u	/etc/cups/ppd/canon_ir_adv_c3325if.ppd
+u	/etc/cups/ppd/canon_ir_adv_dx_c3926i.ppd
 u	/etc/cups/printers.conf
 u	/Library/Printers/PPDs/Contents/Resources/CNMCIRAC3325S2.ppd.gz
+u	/Library/Printers/PPDs/Contents/Resources/CNMCIRAC3926S2.ppd.gz
 u	/Library/Printers/Canon/CUPSPS2
 # sudo launchctl start org.cups.cupsd
 
@@ -613,8 +655,8 @@ echo Remote Desktop
 u	~/Library/Containers/com.microsoft.rdc.macos/Data/Library/Preferences/com.microsoft.rdc.macos.plist
 
 # rename_photos
-echo rename_photos
-u	"$PATH_TO_APPS"/rename_date_photos.app
+#echo rename_photos
+#u	"$PATH_TO_APPS"/rename_date_photos.app
 #u	"$PATH_TO_APPS"/rename_number_photos.app
 
 # ResizeIt
@@ -624,13 +666,16 @@ u	~/Library/Preferences/sekn.ResizeIt.plist
 
 # Safari
 echo Safari
-u	~/Library/Safari/Extensions
+#u	~/Library/Safari/Extensions
+u	~/Library/Containers/com.apple.Safari/Data/Library/Safari/AppExtensions
+u	~/Library/Containers/com.apple.Safari/Data/Library/Safari/WebExtensions
 #u	~/Library/Preferences/com.apple.Safari.Extensions.plist
-u	~/Library/Containers/com.apple.Safari/Data/Library/Preferences/com.apple.Safari.Extensions.plist
+#u	~/Library/Containers/com.apple.Safari/Data/Library/Preferences/com.apple.Safari.Extensions.plist
 u	~/Library/Safari/Bookmarks.plist
-u	~/Library/Group Containers/better.fyi.mac
-u	~/Library/Group Containers/*.ghostery.lite
-u	~/Library/Group Containers/*.com.adguard.safari.AdGuard
+#u	~/Library/Group Containers/better.fyi.mac
+#u	~/Library/Group Containers/*.ghostery.lite
+#u	~/Library/Group Containers/*.com.adguard.safari.AdGuard
+u	~/Library/Group Containers/TC3Q7MAJXF.com.adguard.safari.AdGuard
 u	~/Library/Containers/com.adguard.safari.AdGuard/Data/Library/Application Support/AdGuardSafariApp/config.json
 u	~/Library/Containers/com.apple.Safari/Data/Library/WebKit/ContentExtensions
 #u	~/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies
@@ -650,7 +695,12 @@ u	~/Library/Preferences/pbs.plist
 u	~/Library/Services/Tag Orange.workflow
 u	~/Library/Services/dial_snom.workflow
 u	~/Library/Services/split_pdfs.workflow
+u	~/Library/Services/copy_number_contacts.workflow
 # /System/Library/CoreServices/pbs -flush
+
+# Shortcuts
+echo Shortcuts
+u	~/Library/Shortcuts
 
 # Signal
 echo Signal
@@ -792,6 +842,10 @@ u	~/Library/Preferences/org.virtualbox.app.VirtualBox.plist
 u	~/Library/Preferences/org.virtualbox.app.VirtualBoxVM.plist
 u	~/Library/VirtualBox
 
+# UTM
+echo UTM
+u	~/Library/Containers/com.utmapp.UTM/Data/Library/Preferences/com.utmapp.UTM.plist
+
 # VirtualBox Menulet
 echo VirtualBox Menulet
 u	"$PATH_TO_APPS"/VirtualBox Menulet.app
@@ -803,6 +857,11 @@ echo Virus Scanner Plus
 u	~/Library/Containers/com.bitdefender.virusscannerplus/Data/Library/Preferences/com.bitdefender.virusscannerplus.plist
 u	~/Library/Containers/com.bitdefender.virusscannerplus/Data/Library/Application Support/Bitdefender Virus Scanner Plus/antivirus.bundle/exclusions.plist
 u	~/Library/Containers/com.bitdefender.virusscannerplus/Data/Documents/access_rights
+
+# Visual Studio Code
+echo Visual Studio Code
+u	~/.vscode
+u	~/Library/Application Support/Code/User
 
 # VLC
 echo VLC
@@ -821,10 +880,8 @@ echo VOX
 u	~/Library/Containers/com.coppertino.Vox/Data/Library/Preferences/com.coppertino.Vox.plist
 
 # Whatsapp
-echo Whatsapp
-#u	"$PATH_TO_APPS"/Whatsapp.app
-u	~/Library/Application Support/WhatsApp
-u	~/Library/Preferences/WhatsApp.plist
+#echo Whatsapp
+# whatsapp switched to a native app that has to be linked to the new installation on first run
 
 # Widgets
 #echo Widgets
@@ -836,8 +893,14 @@ u	~/Library/Preferences/WhatsApp.plist
 
 # Wireguard
 #echo Wireguard
+# backup and restore done by restoring login.keychain-db or manually like this
+# https://aaron.cc/restoring-the-wireguard-configuration-from-a-backup/
+# https://superuser.com/questions/1488506/how-to-restore-macos-wireguard-vpns-after-catalina-beta-update#:~:text=If%20you%20cannot%20find%20it,in%20the%20%22Password%22%20field
 #u	/Library/Preferences/SystemConfiguration/preferences.plist
 #u	/Library/Preferences/com.apple.networkextension.plist
+# already done with keychain backup
+#u	~/Library/Preferences/com.apple.keychainaccess.plist
+#u	~/Library/Keychains
 
 # Witch
 echo Witch

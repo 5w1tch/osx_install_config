@@ -28,7 +28,11 @@ SCRIPT_INSTALL_NAME=reminders
 ### functions
 wait_for_loggedinuser() {
     ### waiting for logged in user
-    loggedInUser=$(/usr/bin/python -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+    # recommended way, but it seems apple deprecated python2 in macOS 12.3.0
+    # to keep on using the python command, a python module is needed
+    #pip3 install pyobjc-framework-SystemConfiguration
+    #loggedInUser=$(python3 -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+    loggedInUser=$(scutil <<< "show State:/Users/ConsoleUser" | awk '/Name :/ && ! /loginwindow/ { print $3 }')
     NUM=0
     MAX_NUM=30
     SLEEP_TIME=3
@@ -37,7 +41,11 @@ wait_for_loggedinuser() {
     do
         sleep "$SLEEP_TIME"
         NUM=$((NUM+1))
-        loggedInUser=$(/usr/bin/python -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+        # recommended way, but it seems apple deprecated python2 in macOS 12.3.0
+        # to keep on using the python command, a python module is needed
+        #pip3 install pyobjc-framework-SystemConfiguration
+        #loggedInUser=$(python3 -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+        loggedInUser=$(scutil <<< "show State:/Users/ConsoleUser" | awk '/Name :/ && ! /loginwindow/ { print $3 }')
     done
     #echo ''
     #echo "NUM is $NUM..."
@@ -220,29 +228,36 @@ wait_for_network_select() {
 }
 
 setting_config() {
+    echo ''
     ### sourcing .$SHELLrc or setting PATH
     # as the script is run from a launchd it would not detect the binary commands and would fail checking if binaries are installed
     # needed if binary is installed in a special directory
-    if [[ -n "$BASH_SOURCE" ]] && [[ -e /Users/"$loggedInUser"/.bashrc ]] && [[ $(cat /Users/"$loggedInUser"/.bashrc | grep 'PATH=.*/usr/local/bin:') != "" ]]
+    if [[ -n "$BASH_SOURCE" ]] && [[ -e /Users/"$loggedInUser"/.bashrc ]] && [[ $(cat /Users/"$loggedInUser"/.bashrc | grep 'export PATH=.*:$PATH"') != "" ]]
     then
         echo "sourcing .bashrc..."
-        . /Users/"$loggedInUser"/.bashrc
-    elif [[ -n "$ZSH_VERSION" ]] && [[ -e /Users/"$loggedInUser"/.zshrc ]] && [[ $(cat /Users/"$loggedInUser"/.zshrc | grep 'PATH=.*/usr/local/bin:') != "" ]]
+        #. /Users/"$loggedInUser"/.bashrc
+        # avoiding oh-my-zsh errors for root by only sourcing export PATH
+        source <(sed -n '/^export\ PATH\=/p' /Users/"$loggedInUser"/.bashrc)
+    elif [[ -n "$ZSH_VERSION" ]] && [[ -e /Users/"$loggedInUser"/.zshrc ]] && [[ $(cat /Users/"$loggedInUser"/.zshrc | grep 'export PATH=.*:$PATH"') != "" ]]
     then
         echo "sourcing .zshrc..."
         ZSH_DISABLE_COMPFIX="true"
-        . /Users/"$loggedInUser"/.zshrc
+        #. /Users/"$loggedInUser"/.zshrc
+        # avoiding oh-my-zsh errors for root by only sourcing export PATH
+        source <(sed -n '/^export\ PATH\=/p' /Users/"$loggedInUser"/.zshrc)
     else
-        echo "setting path for script..."
-        export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
+        echo "PATH was not set continuing with default value..."
     fi
+    echo "using PATH..." 
+    echo "$PATH"
+    echo ''
 }
 
-check_dnd_status() {
+check_dnd_status_macos11() {
     DND_STATUS=$(plutil -extract dnd_prefs xml1 -o - /Users/"$USER"/Library/Preferences/com.apple.ncprefs.plist | xmllint --xpath "string(//data)" - | base64 --decode | plutil -convert xml1 - -o - | xmllint --xpath 'boolean(//key[text()="userPref"]/following-sibling::dict/key[text()="enabled"])' -)
 }
 
-enable_dnd() {
+enable_dnd_macos11() {
 	defaults read /Users/"$USER"/Library/Preferences/com.apple.ncprefs.plist >/dev/null
     DND_HEX_DATA=$(plutil -extract dnd_prefs xml1 -o - /Users/"$USER"/Library/Preferences/com.apple.ncprefs.plist | xmllint --xpath "string(//data)" - | base64 --decode | plutil -convert xml1 - -o - | plutil -insert userPref -xml "
     <dict>
@@ -274,7 +289,7 @@ enable_dnd() {
     sleep 2
 }
 
-disable_dnd() {
+disable_dnd_macos11() {
 	defaults read /Users/"$USER"/Library/Preferences/com.apple.ncprefs.plist >/dev/null
     DND_HEX_DATA=$(plutil -extract dnd_prefs xml1 -o - /Users/"$USER"/Library/Preferences/com.apple.ncprefs.plist | xmllint --xpath "string(//data)" - | base64 --decode | plutil -convert xml1 - -o - | plutil -remove userPref - -o - | plutil -convert binary1 - -o - | xxd -p | tr -d '\n')
     defaults write com.apple.ncprefs.plist dnd_prefs -data "$DND_HEX_DATA"
@@ -298,6 +313,43 @@ disable_dnd() {
     sleep 2
 }
 
+check_dnd_status() {
+	# check dnd state
+	# 0 = off
+	# 1 = on
+	if [[ $(defaults read com.apple.controlcenter | grep "NSStatusItem Visible FocusModes") != "" ]]
+	then
+	    DND_STATUS=$(defaults read com.apple.controlcenter "NSStatusItem Visible FocusModes")
+	else
+	    DND_STATUS=""
+	fi
+}
+
+# enable dnd
+enable_dnd() {
+	echo "enabling dnd..."
+	if [[ -e "/System/Applications/Shortcuts.app" ]] && [[ $(shortcuts list | grep -x "dnd-on") != "" ]] 
+	then
+		shortcuts run dnd-on
+		sleep 1
+		#defaults read com.apple.controlcenter "NSStatusItem Visible FocusModes"
+	else
+		echo "shortcuts app or shortcuts name not found..."
+	fi
+}
+
+disable_dnd() {
+    echo "disabling dnd..."
+	if [[ -e "/System/Applications/Shortcuts.app" ]] && [[ $(shortcuts list | grep -x "dnd-off") != "" ]] 
+	then
+		shortcuts run dnd-off
+		sleep 1
+		#defaults read com.apple.controlcenter "NSStatusItem Visible FocusModes"
+	else
+		echo "shortcuts app or shortcuts name not found..."
+	fi
+}
+
 
 ### script
 create_logfile
@@ -310,9 +362,10 @@ wait_for_network_select
 echo ''
 wait_for_getting_online
 # run before main function, e.g. for time format
-setting_config &> /dev/null
 
 reminders_notifications_and_update() {
+
+    setting_config
     
     ### loggedInUser
     echo "loggedInUser is $loggedInUser..."
@@ -421,7 +474,13 @@ EOF
     	then
     	    # macos 12
         	APPLICATIONS_TO_SET_NOTIFICATIONS=(
-        	"Reminders														        1652564311"
+        	"Reminders														        1921524055"
+        	)
+        elif VERSION_TO_CHECK_AGAINST=13; [[ $(env_convert_version_comparable "$MACOS_VERSION_MAJOR") -ge $(env_convert_version_comparable "$VERSION_TO_CHECK_AGAINST") ]]
+        then
+            # macos 13 and higher
+        	APPLICATIONS_TO_SET_NOTIFICATIONS=(
+        	"Reminders														        10511458647"
         	)
     	else
     	    :
@@ -433,16 +492,33 @@ EOF
     	if [[ "$CHECK_RESULT_EXPORT" == "wrong" ]]
     	then
     		echo ''
-    		echo "enabling..."
+    		echo "enabling app notifications..."
     		# disable dnd
-    		check_dnd_status
-    		if [[ "$DND_STATUS" == "true" ]]
-    		then
-    			echo "disabling dnd..."
-                disable_dnd
-            else
-            	:
-            fi
+            if [[ "$MACOS_VERSION_MAJOR" == "11" ]]
+        	then
+        	    # macos 11
+        		check_dnd_status_macos11
+        		if [[ "$DND_STATUS" == "true" ]]
+        		then
+        			echo "disabling dnd..."
+                    disable_dnd_macos11
+                else
+                	:
+                fi
+        	elif [[ "$MACOS_VERSION_MAJOR" -ge "12" ]]
+        	then
+        		check_dnd_status
+        		if [[ "$DND_STATUS" == "1" ]]
+        		then
+        			echo "disabling dnd..."
+                    disable_dnd
+                else
+                	:
+                fi
+        	else
+        	    :
+        	fi
+    	
             # usernoted gets killed in env_set_check_apps_notifications and ControlCenter after REMINDER_STATUS
             echo "enabling reminder notifications..."
             # enable reminder notifications
@@ -450,17 +526,33 @@ EOF
     		APP_SETTING_CHANGED="yes"
     		REMINDER_STATUS="on"
     	else
-    	    echo "already enabled..."
+    	    echo "app notifications already enabled..."
     	    echo ''
-    		# disable dnd
-    		check_dnd_status
-    		if [[ "$DND_STATUS" == "true" ]]
-    		then
-    			echo "disabling dnd..."
-                disable_dnd
-            else
-            	:
-            fi
+    		# make sure dnd is disabled
+            if [[ "$MACOS_VERSION_MAJOR" == "11" ]]
+        	then
+        	    # macos 11
+        		check_dnd_status_macos11
+        		if [[ "$DND_STATUS" == "true" ]]
+        		then
+        			echo "disabling dnd..."
+                    disable_dnd_macos11
+                else
+                	:
+                fi
+        	elif [[ "$MACOS_VERSION_MAJOR" -ge "12" ]]
+        	then
+        		check_dnd_status
+        		if [[ "$DND_STATUS" == "1" ]]
+        		then
+        			echo "disabling dnd..."
+                    disable_dnd
+                else
+                	:
+                fi
+        	else
+        	    :
+        	fi
     	fi
     fi
     

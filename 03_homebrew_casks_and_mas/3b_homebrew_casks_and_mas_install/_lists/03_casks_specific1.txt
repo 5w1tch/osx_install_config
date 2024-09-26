@@ -1,8 +1,8 @@
-chromium
-audiobookbinder
-paragon-extfs
+#audiobookbinder		# no more cask, only available in appstore
+#paragon-extfs
 deluge
 github
+google-drive
 #jdownloader
 spotify
 transmission

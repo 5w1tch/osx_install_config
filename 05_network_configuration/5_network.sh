@@ -90,19 +90,22 @@ fi
 
 getting_network_device_ids() {
     # get device names
-    WLAN_DEVICE=$(system_profiler SPNetworkDataType | grep -B2 "Type: AirPort" | head -n 1 | sed 's/^[ \t]*//;s/[ \t]*$//' | sed 's/:$//g')
-    ETHERNET_DEVICE=$(system_profiler SPNetworkDataType | grep -B2 "Type: Ethernet" | sed 's/^[ \t]*//' | sed 's/\:$//g' | grep -v "^--" | grep -v "^Type:" | sed '/^$/d' | grep -v "Bluetooth" | grep -v "Bridge")
-    #ETHERNET_DEVICE="USB 10/100/1000 LAN"      # macbook pro 2018 and newer
-    #ETHERNET_DEVICE="Ethernet"                 # imacs
     HARDWARE_TYPE=$(system_profiler SPHardwareDataType | grep "Model Name" | awk -F":" '{print $2}' | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//g' | sed -e 's/[[:space:]]*$//g' | sed -e 's/ //g') 
+    WLAN_DEVICE=$(system_profiler SPNetworkDataType | grep -B2 "Type: AirPort" | head -n 1 | sed 's/^[ \t]*//;s/[ \t]*$//' | sed 's/:$//g')
+    #ETHERNET_DEVICE="USB 10/100/1000 LAN"      # macbook pro 2018 and newer
+    #ETHERNET_DEVICE="Ethernet"                         # imacs
+    ETHERNET_DEVICE=""
     if [[ "$ETHERNET_DEVICE" == "" ]] && [[ "$HARDWARE_TYPE" == "macbookpro" ]]
+    then
+        ETHERNET_DEVICE="USB 10/100/1000 LAN"
+    elif [[ "$ETHERNET_DEVICE" == "" ]] && [[ "$HARDWARE_TYPE" == "macbookair" ]]
     then
         ETHERNET_DEVICE="USB 10/100/1000 LAN"
     elif [[ "$ETHERNET_DEVICE" == "" ]] && [[ "$HARDWARE_TYPE" == "imac" ]]
     then
         ETHERNET_DEVICE="Ethernet"
     else
-        :
+            ETHERNET_DEVICE=$(system_profiler SPNetworkDataType | grep -B2 "Type: Ethernet" | sed 's/^[ \t]*//' | sed 's/\:$//g' | grep -v "^--" | grep -v "^Type:" | sed '/^$/d' | grep -v "Bluetooth" | grep -v "Bridge")
     fi
     BLUETOOTH_DEVICE=$(system_profiler SPNetworkDataType | grep -B2 "Type: Ethernet" | sed 's/^[ \t]*//' | sed 's/\:$//g' | grep -v "^--" | grep -v "^Type:" | sed '/^$/d' | grep "Bluetooth")
     THUNDERBOLT_BRIDGE_DEVICE=$(system_profiler SPNetworkDataType | grep -B2 "Type: Ethernet" | sed 's/^[ \t]*//' | sed 's/\:$//g' | grep -v "^--" | grep -v "^Type:" | sed '/^$/d' | grep "Bridge")
@@ -178,7 +181,9 @@ create_location_tmp_automatic() {
     sleep 2
     if [[ "$ETHERNET_DEVICE" != "" ]] && [[ $(networksetup -listallhardwareports | grep "$ETHERNET_DEVICE$") != "" ]]
     then
-        sudo networksetup -setv6off "$ETHERNET_DEVICE"
+        # do not disable ipv6 for automatic profiles as they should keep all default settings
+        # as of 2024-01 the client internet connection (macbook) does not work with ipv6 disabled for Wi-Fi when connected to the iphone mobile data access point
+        #sudo networksetup -setv6off "$ETHERNET_DEVICE"
         #sudo networksetup -setv6automatic "$ETHERNET_DEVICE"
         sleep 2
     else
@@ -186,7 +191,9 @@ create_location_tmp_automatic() {
     fi
     if [[ "$WLAN_DEVICE" != "" ]] && [[ $(networksetup -listallhardwareports | grep "$WLAN_DEVICE$") != "" ]]
     then
-        sudo networksetup -setv6off "$WLAN_DEVICE"
+        # do not disable ipv6 for automatic profiles as they should keep all default settings
+        # as of 2024-01 the client internet connection (macbook) does not work with ipv6 disabled for Wi-Fi when connected to the iphone mobile data access point
+        #sudo networksetup -setv6off "$WLAN_DEVICE"
         #sudo networksetup -setv6automatic "$WLAN_DEVICE"
         sleep 2
     else
@@ -206,7 +213,9 @@ create_location_automatic() {
     sleep 2
     if [[ "$ETHERNET_DEVICE" != "" ]] && [[ $(networksetup -listallhardwareports | grep "$ETHERNET_DEVICE$") != "" ]]
     then
-        sudo networksetup -setv6off "$ETHERNET_DEVICE"
+        # do not disable ipv6 for automatic profiles as they should keep all default settings
+        # as of 2024-01 in case a client (e.g. macbook) connects to the mobile data acces point of an iphone the internet connection does not work for the client
+        #sudo networksetup -setv6off "$ETHERNET_DEVICE"
         #sudo networksetup -setv6automatic "$ETHERNET_DEVICE"
         sleep 2
     else
@@ -214,7 +223,9 @@ create_location_automatic() {
     fi
     if [[ "$WLAN_DEVICE" != "" ]] && [[ $(networksetup -listallhardwareports | grep "$WLAN_DEVICE$") != "" ]]
     then
-        sudo networksetup -setv6off "$WLAN_DEVICE"
+        # do not disable ipv6 for automatic profiles as they should keep all default settings
+        # as of 2024-01 in case a client (e.g. macbook) connects to the mobile data acces point of an iphone the internet connection does not work for the client
+        #sudo networksetup -setv6off "$WLAN_DEVICE"
         #sudo networksetup -setv6automatic "$WLAN_DEVICE"
         sleep 2
     else
@@ -276,8 +287,11 @@ create_location_custom() {
     then
         sudo networksetup -createnetworkservice "$WLAN_DEVICE" "$WLAN_DEVICE"
         sleep 2
-        sudo networksetup -setv6off "$WLAN_DEVICE"
-        sleep 2
+        # as of 2024-01 in case a client (e.g. macbook) connects to the mobile data acces point of an iphone the internet connection does not work for the client
+        # due to this if no other issue comes up leave the default value (setv6automatic) enabled
+        #sudo networksetup -setv6off "$WLAN_DEVICE"
+        #sudo networksetup -setv6automatic "$WLAN_DEVICE"
+        #sleep 2
     else
         :
     fi
@@ -289,9 +303,11 @@ create_location_custom() {
         sleep 2
         sudo networksetup -setdnsservers "$ETHERNET_DEVICE" "$DNS"
         sleep 2
-        sudo networksetup -setv6off "$ETHERNET_DEVICE"
+        # as of 2024-01 in case a client (e.g. macbook) connects to the mobile data acces point of an iphone the internet connection does not work for the client
+        # due to this if no other issue comes up leave the default value (setv6automatic) enabled
+        #sudo networksetup -setv6off "$ETHERNET_DEVICE"
         #sudo networksetup -setv6automatic "$ETHERNET_DEVICE"
-        sleep 2
+        #sleep 2
         if [[ -e /Users/"$loggedInUser"/Library/Preferences/network_profile_"$loggedInUser".conf ]]; then rm -f /Users/"$loggedInUser"/Library/Preferences/network_profile_"$loggedInUser".conf; else :;fi
     else
         echo "ethernet device not present or not defined, skipping..."
@@ -304,34 +320,46 @@ create_location_custom() {
 }
 
 show_vpn_in_menu_bar() {
-    ### adding entry
-    # show vpn in the menu bar
-    if [[ $(defaults read com.apple.systemuiserver menuExtras | grep "vpn.menu") == "" ]]
-    then
-        defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/vpn.menu" >/dev/null 2>&1
-        # do not show vpm connection time in menu bar
-        # 0 = no
-        # 1 = yes
-        defaults write com.apple.networkConnect VPNShowTime 0
-        # make changes take effect
-        killall SystemUIServer -HUP
-    else
-        :
-    fi
-
-    ### deleting entry
-    # it seems deleting entries needs a reboot for the changes to take effect
-    # killall SystemUIServer -HUP is not enough
-
-    #NotPreferredMenuExtras=(
-    #"/System/Library/CoreServices/Menu Extras/vpn.menu"
-    #)
     
-    #for varname in "${NotPreferredMenuExtras[@]}"; 
-    #do
-    #    /usr/libexec/PlistBuddy -c "Delete 'menuExtras:$(defaults read ~/Library/Preferences/com.apple.systemuiserver.plist menuExtras | cat -n | grep "$varname" | awk '{print SUM $1-2}') string'" ~/Library/Preferences/com.apple.systemuiserver.plist >/dev/null 2>&1
-    #    :
-    #done
+    ### enabling icon in menu bar/adding entry
+    show_vpn_menu_bar_icon() {
+        if [[ $(defaults read com.apple.systemuiserver menuExtras | grep "vpn.menu") == "" ]]
+        then
+            defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/vpn.menu" >/dev/null 2>&1
+            # do not show vpm connection time in menu bar
+            # 0 = no
+            # 1 = yes
+            defaults write com.apple.networkConnect VPNShowTime 0
+            # make changes take effect
+            killall SystemUIServer -HUP
+        else
+            :
+        fi
+    }
+    show_vpn_machine_menu_bar_icon
+
+    ### disabling icon in menu bar/deleting entry
+    hide_vpn_menu_bar_icon() {
+        defaults write ~/Library/Preferences/ByHost/com.apple.systemuiserver.$uuid1.plist dontAutoLoad -array "/System/Library/CoreServices/Menu Extras/vpn.menu" >/dev/null 2>&1
+        
+        NotPreferredMenuExtras=(
+        "/System/Library/CoreServices/Menu Extras/vpn.menu"
+        )
+        
+        for varname in "${NotPreferredMenuExtras[@]}"; 
+        do
+            /usr/libexec/PlistBuddy -c "Delete 'menuExtras:$(defaults read ~/Library/Preferences/com.apple.systemuiserver.plist menuExtras | cat -n | grep "$varname" | awk '{print SUM $1-2}') string'" ~/Library/Preferences/com.apple.systemuiserver.plist >/dev/null 2>&1 | grep -v "Does Not Exist" | grep -v "does not exist"
+            :
+        done
+        
+        # make changes take effect
+        sleep 2
+        killall cfprefsd -HUP
+        killall SystemUIServer -HUP
+        sleep 5
+    }
+    #hide_vpn_menu_bar_icon
+    
 }
 
 configure_fritz_vpn() {
@@ -524,6 +552,15 @@ check_if_ethernet_is_active() {
     #echo ''
 }
 
+set_wifi_joinmodefallback() {
+    # ask to join new networks (JoinModeFallback)
+    # has to be done for every network profile, only works when the respective profile is active
+    # no = DoNothing
+    # yes = Prompt
+    # list options /System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport
+    sudo /System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport "$WLAN_DEVICE_ID" prefs JoinModeFallback=DoNothing
+    sleep 2
+}
 
 
 ###
@@ -575,6 +612,7 @@ if [[ "$CREATE_LOCATION_AUTOMATIC" == "yes" ]]
 then
     echo ''
     create_location_automatic
+    set_wifi_joinmodefallback
 else
     :
 fi
@@ -585,6 +623,7 @@ if [[ "$CREATE_LOCATION_CUSTOM" == "yes" ]]
 then
     echo ''
     create_location_custom
+    set_wifi_joinmodefallback
 else
     :
 fi
@@ -595,6 +634,7 @@ if [[ "$CREATE_LOCATION_WLAN" == "yes" ]]
 then
     echo ''
     create_location_wlan
+    set_wifi_joinmodefallback
 else
     :
 fi
@@ -642,7 +682,17 @@ else
     echo "setting wlan auto hotspot mode..."
     sudo /usr/libexec/PlistBuddy -c "Add :AutoHotspotMode string" /Library/Preferences/SystemConfiguration/com.apple.airport.preferences.plist &> /dev/null
     sudo /usr/libexec/PlistBuddy -c "Set :AutoHotspotMode 'Never'" /Library/Preferences/SystemConfiguration/com.apple.airport.preferences.plist
-fi  
+fi
+
+###
+# ask to join new networks (JoinModeFallback)
+# has to be done for every network profile, only works when the respective profile is active
+# no = DoNothing
+# yes = Prompt
+# list options /System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport
+# sudo /System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport en0 prefs JoinModeFallback=DoNothing
+
+
 
 
 ### locations created
@@ -679,11 +729,13 @@ fi
 if [[ "$WIFI_SSID" != "" ]]
 then
     sudo networksetup -setairportpower "$WLAN_DEVICE_ID" off
-    sleep 5
+    sleep 3
     sudo networksetup -setairportpower "$WLAN_DEVICE_ID" on
+    sleep 3
+    /System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -s
     sleep 5
     sudo networksetup -setairportnetwork "$WLAN_DEVICE_ID" "$WIFI_SSID"
-    sleep 5
+    sleep 3
 else
     :
 fi

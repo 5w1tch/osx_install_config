@@ -50,6 +50,66 @@ else
 fi
 
 
+###
+### functions
+###
+
+# for macos 13 and newer running helper apps on login by using
+# launchctl enable gui/"$(id -u "$USER")"/APP_IDENTIFIER
+# does no longer work
+
+# it seems an entry in the BackgroundItems file is needed
+# readable output
+#sfltool dumpbtm /private/var/db/com.apple.backgroundtaskmanagement/BackgroundItems-v8.btm
+# delete all data from login-items
+#sfltool resetbtm
+#
+# disabling
+# bootout, disbale and remove with launchctl did not work as of 2023-09
+#
+# deleting and disabling
+# to make an item disappear from the list, delete the corresponding files in
+# /Library/LaunchAgents			system
+# /Library/LaunchDaemons		system
+# ~/Library/LaunchAgents		user
+# will be reinstalled on every app update of the corresponding app
+# workaround included in run_on_shutdown.sh script
+
+# as a workaround a launchagent is working
+create_user_launch_agent() {
+
+	if [[ "$USER_LAUNCH_AGENT_NAME" != "" ]] && [[ "$USER_LAUNCH_AGENT_LOGIN_HELPER" != "" ]] && [[ -e "$USER_LAUNCH_AGENT_LOGIN_HELPER" ]]
+	then
+		cat > "/Users/"$USER"/Library/LaunchAgents/"$USER_LAUNCH_AGENT_NAME".plist" << EOF
+		<?xml version="1.0" encoding="UTF-8"?>
+		<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+		<plist version="1.0">
+		<dict>
+			<key>Label</key>
+			<string>$USER_LAUNCH_AGENT_NAME</string>
+			<key>ProgramArguments</key>
+			<array>
+				<string>zsh</string>
+				<string>-c</string>
+				<string>"$USER_LAUNCH_AGENT_LOGIN_HELPER"</string>
+			</array>
+			<key>RunAtLoad</key>
+			<true/>
+		</dict>
+		</plist>
+EOF
+	else
+		echo ''
+		echo "user launch agent "$USER_LAUNCH_AGENT_NAME" could not be created, skipping..." &>2
+		echo ''
+	fi
+	
+}
+#USER_LAUNCH_AGENT_NAME="com.APPNAME_login_helper.custom"
+#USER_LAUNCH_AGENT_LOGIN_HELPER="PATH_TO_LOGIN_HELPER_SCRIPT_NOT_TO_APP"
+#create_user_launch_agent
+
+
 
 ###
 ### setting some non apple third party app preferences
@@ -57,7 +117,6 @@ fi
 
 
 ### totalfinder
-
 totalfinder_settings() {
 	echo ''
 	APP_NAME_FOR_PREFERENCES="TotalFinder"
@@ -203,10 +262,10 @@ then
 	fi
 	launchctl bootout gui/"$(id -u "$USER")"/com.bjango.istatmenus.agent 2>&1 | grep -v "in progress" | grep -v "No such process"
 	#launchctl kill 15 gui/"$(id -u "$USER")"/com.bjango.istatmenus.agent
-	sleep 2
+	sleep 3
 	launchctl enable gui/"$(id -u "$USER")"/com.bjango.istatmenus.agent
 	launchctl bootstrap gui/"$(id -u "$USER")" "/Users/"$USER"/Library/LaunchAgents/com.bjango.istatmenus.agent.plist" 2>&1 | grep -v "in progress" | grep -v "already bootstrapped"
-	sleep 2
+	sleep 3
 	
 	if [[ -e ""$PATH_TO_APPS"/"$APP_NAME_FOR_PREFERENCES".app/Contents/Resources/InstallerBundle.bundle/Contents/Resources/com.bjango.istatmenus.status.plist" ]]
 	then
@@ -216,33 +275,33 @@ then
 	fi
 	launchctl bootout gui/"$(id -u "$USER")"/com.bjango.istatmenus.status 2>&1 | grep -v "in progress" | grep -v "No such process"
 	#launchctl kill 15 gui/"$(id -u "$USER")"/com.bjango.istatmenus.status
-	sleep 2
+	sleep 3
 	launchctl enable gui/"$(id -u "$USER")"/com.bjango.istatmenus.status
 	launchctl bootstrap gui/"$(id -u "$USER")" "/Users/"$USER"/Library/LaunchAgents/com.bjango.istatmenus.status.plist" 2>&1 | grep -v "in progress" | grep -v "already bootstrapped"
-	sleep 2
+	sleep 3
 	
 	#launchctl print-disabled system
 	#launchctl print system | grep com.bjango.
 	sudo launchctl bootout system "/Library/LaunchDaemons/com.bjango.istatmenus.fans.plist" 2>&1 | grep -v "in progress" | grep -v "No such process"
 	#sudo launchctl kill 15 system/com.bjango.istatmenus.fans
-	sleep 2
+	sleep 3
 	sudo launchctl enable system/com.bjango.istatmenus.fans
 	sudo launchctl bootstrap system "/Library/LaunchDaemons/com.bjango.istatmenus.fans.plist" 2>&1 | grep -v "in progress" | grep -v "already bootstrapped"
-	sleep 2
+	sleep 3
 	
 	sudo launchctl bootout system "/Library/LaunchDaemons/com.bjango.istatmenus.daemon.plist" 2>&1 | grep -v "in progress" | grep -v "No such process"
 	#sudo launchctl kill 15 system/com.bjango.istatmenus.daemon
-	sleep 2
+	sleep 3
 	sudo launchctl enable system/com.bjango.istatmenus.daemon
 	sudo launchctl bootstrap system "/Library/LaunchDaemons/com.bjango.istatmenus.daemon.plist" 2>&1 | grep -v "in progress" | grep -v "already bootstrapped"
-	sleep 2
+	sleep 3
 	
 	#sudo launchctl bootout system "/Library/LaunchDaemons/com.bjango.istatmenus.installerhelper.plist" 2>&1 | grep -v "in progress" | grep -v "No such process"
 	#sudo launchctl kill 15 system/com.bjango.istatmenus.installerhelper
-	#sleep 2
+	#sleep 3
 	#sudo launchctl enable system com.bjango.istatmenus.installerhelper
 	#sudo launchctl bootstrap system "/Library/LaunchDaemons/com.bjango.istatmenus.installerhelper.plist" 2>&1 | grep -v "in progress" | grep -v "already bootstrapped"
-	#sleep 2
+	#sleep 3
 	
 	# permissions are set from restore script
 
@@ -263,10 +322,10 @@ then
 	
 	sudo launchctl bootout system "/Library/LaunchDaemons/BresinkSoftwareUpdater-PrivilegedTool.plist" 2>&1 | grep -v "in progress" | grep -v "No such process"
 	#sudo launchctl kill 15 system/BresinkSoftwareUpdater-PrivilegedTool
-	sleep 2
+	sleep 3
 	sudo launchctl enable system/BresinkSoftwareUpdater-PrivilegedTool
 	sudo launchctl bootstrap system "/Library/LaunchDaemons/BresinkSoftwareUpdater-PrivilegedTool.plist" 2>&1 | grep -v "in progress" | grep -v "already bootstrapped"
-	sleep 2
+	sleep 3
 	
 	# permissions are set from restore script
 
@@ -275,7 +334,7 @@ else
 fi
 
 
-### appcleaner
+### the unarchiver
 echo ''
 APP_NAME_FOR_PREFERENCES="The Unarchiver"
 if [[ -e ""$PATH_TO_APPS"/"$APP_NAME_FOR_PREFERENCES".app" ]]
@@ -300,12 +359,108 @@ then
 	
 	echo "$APP_NAME_FOR_PREFERENCES"
     
+    #launchctl kickstart -k gui/"$(id -u "$USER")"/com.bitdefender.VirusScannerHelper
+    #sleep 3
+  	#launchctl enable gui/"$(id -u "$USER")"/com.bitdefender.VirusScannerHelper
+  	#sleep 3
+  	
+  	USER_LAUNCH_AGENT_NAME="com.bitdefender_virusscanner_login_helper.custom"
+	USER_LAUNCH_AGENT_LOGIN_HELPER="/Applications/VirusScannerPlus.app/Contents/Library/LoginItems/VirusScannerHelper.app/Contents/MacOS/VirusScannerHelper"
+	create_user_launch_agent
+  	
 	defaults write com.bitdefender.virusscannerplus continuous_run -bool true
 	defaults write com.bitdefender.virusscannerplus upd_automatic -bool true
 	defaults write com.bitdefender.virusscannerplus oas_scan -bool true
-	#defaults write com.bitdefender.virusscannerplus shouldShowTerms -bool false
-	#defaults write com.bitdefender.virusscannerplus termsOfUse -bool true
+	defaults write com.bitdefender.virusscannerplus shouldShowTerms -bool false
+	defaults write com.bitdefender.virusscannerplus termsOfUse -bool true
+	defaults write com.bitdefender.virusscannerplus isForeground -bool false
 	
+else
+	echo ""$APP_NAME_FOR_PREFERENCES" not found, skipping setting preferences..." >&2
+fi
+
+
+### adguard for safari
+echo ''
+APP_NAME_FOR_PREFERENCES="AdGuard for Safari"
+if [[ -e ""$PATH_TO_APPS"/"$APP_NAME_FOR_PREFERENCES".app" ]]
+then
+	
+	echo "$APP_NAME_FOR_PREFERENCES"
+    
+    #launchctl print gui/$(id -u)
+    #launchctl print-disabled "user/$(id -u)"
+    #launchctl list | grep -i adguard
+	#launchctl enable gui/"$(id -u "$USER")"/com.adguard.safari.AdGuard.login-helper
+	#launchctl enable user/"$(id -u "$USER")"/com.adguard.safari.AdGuard.login-helper
+	#launchctl start gui/"$(id -u "$USER")"/com.adguard.safari.AdGuard.login-helper
+	#launchctl kickstart -k gui/"$(id -u "$USER")"/com.adguard.safari.AdGuard.login-helper
+	
+	# defaults read /private/var/db/com.apple.xpc.launchd/loginitems.501.plist
+	# open /private/var/db/com.apple.xpc.launchd/loginitems.501.plist
+	#/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -dump
+	
+	#launchctl remove gui/"$(id -u "$USER")"/com.adguard.safari.AdGuard.login-helper
+	#launchctl remove gui/"$(id -u "$USER")"/com.adguard.safari.AdGuard
+	
+	#sleep 3
+	
+	USER_LAUNCH_AGENT_NAME="com.adguard_login_helper.custom"
+	USER_LAUNCH_AGENT_LOGIN_HELPER="/Applications/AdGuard for Safari.app/Contents/Library/LoginItems/AdGuard Login Helper.app/Contents/MacOS/AdGuard Login Helper"
+	create_user_launch_agent
+
+else
+	echo ""$APP_NAME_FOR_PREFERENCES" not found, skipping setting preferences..." >&2
+fi
+
+
+### wireguard
+echo ''
+APP_NAME_FOR_PREFERENCES="WireGuard"
+if [[ -e ""$PATH_TO_APPS"/"$APP_NAME_FOR_PREFERENCES".app" ]]
+then
+	
+	echo "$APP_NAME_FOR_PREFERENCES"
+    
+	launchctl enable gui/"$(id -u "$USER")"/com.wireguard.macos.login-item-helper
+	sleep 3
+
+else
+	echo ""$APP_NAME_FOR_PREFERENCES" not found, skipping setting preferences..." >&2
+fi
+
+
+### bettertouchtool
+echo ''
+APP_NAME_FOR_PREFERENCES="BetterTouchTool"
+if [[ -e ""$PATH_TO_APPS"/"$APP_NAME_FOR_PREFERENCES".app" ]]
+then
+	
+	echo "$APP_NAME_FOR_PREFERENCES"
+    
+	defaults write com.hegenberg.BetterTouchTool launchOnStartup -bool true
+
+else
+	echo ""$APP_NAME_FOR_PREFERENCES" not found, skipping setting preferences..." >&2
+fi
+
+
+### bartender
+echo ''
+APP_NAME_FOR_PREFERENCES="Bartender 5"
+if [[ -e ""$PATH_TO_APPS"/"$APP_NAME_FOR_PREFERENCES".app" ]]
+then
+	
+	echo "$APP_NAME_FOR_PREFERENCES"
+    
+    #launchctl enable user/"$(id -u "$USER")"/com.surteesstudios.BartenderStartAtLoginHelper
+	#launchctl enable gui/"$(id -u "$USER")"/com.surteesstudios.BartenderStartAtLoginHelper
+	#sleep 3
+	
+	USER_LAUNCH_AGENT_NAME="com.bartender_login_helper.custom"
+	USER_LAUNCH_AGENT_LOGIN_HELPER="/Applications/"$APP_NAME_FOR_PREFERENCES".app/Contents/Library/LoginItems/BartenderStartAtLoginHelper.app/Contents/MacOS/BartenderStartAtLoginHelper"
+	create_user_launch_agent
+
 else
 	echo ""$APP_NAME_FOR_PREFERENCES" not found, skipping setting preferences..." >&2
 fi
@@ -329,7 +484,7 @@ then
 	# reset quicklook and quicklook cache if neccessary
 	#qlmanage -r
 	#qlmanage -r cache
-	
+
 else
 	echo ""$APP_NAME_FOR_PREFERENCES" not found, skipping setting preferences..." >&2
 fi
@@ -435,7 +590,7 @@ fi
 #defaults write ~/Library/Preferences/org.gpgtools.gpgmail SignNewEmailsByDefault -bool false
 
 
-### office 2019
+### office
 echo ''
 if [[ $(find ""$PATH_TO_APPS"/" -mindepth 1 -maxdepth 1 -name "Microsoft *.app") != "" ]]
 then
@@ -764,24 +919,40 @@ vbox_workaround() {
 	sudo kextload -b org.virtualbox.kext.VBoxNetAdp
 	sudo kextload -b org.virtualbox.kext.VBoxUSB
 	
-	# open System Preferences - Privacy - General
+	# open System Settings - Privacy - General
 	# accept extensions
 	# allowing kext extensions via mobileconfig profile does not work locally, has to be deployed by a trusted mdm server
+	osascript <<EOF	
+	tell application "System Settings"
+		reopen
+		delay 3
+		#activate
+		#delay 2
+	end tell
+	
+	# do not use visible as it makes the window un-clickable
+	#tell application "System Events" to tell process "System Settings" to set visible to true
+	#delay 1
+	tell application "System Events" to tell process "System Settings" to set frontmost to true
+	delay 1
+EOF
+
 	osascript <<EOF
-	tell application "System Preferences"
-		activate
-		#set paneids to (get the id of every pane)
-		#display dialog paneids
-		#return paneids
-		#set current pane to pane "com.apple.preference.security"
-		#get the name of every anchor of pane id "com.apple.preference.security"
-		#set tabnames to (get the name of every anchor of pane id "com.apple.preference.security")
-		#display dialog tabnames
-		#return tabnames
-		reveal anchor "General" of pane id "com.apple.preference.security"
+	tell application "System Events"
+		tell process "System Settings"
+			#set paneids to (get the id of every pane)
+			#display dialog paneids
+			#return paneids
+			#set current pane to pane "com.apple.preference.security"
+			#get the name of every anchor of pane id "com.apple.preference.security"
+			#set tabnames to (get the name of every anchor of pane id "com.apple.preference.security")
+			#display dialog tabnames
+			#return tabnames
+			reveal anchor "General" of pane id "com.apple.preference.security"
+		end tell
 	end tell
 EOF
-	sleep 2
+	sleep 3
 
 }
 if [[ "$MACOS_VERSION_MAJOR" == "11" ]] && [[ -e "/Users/"$USER"/virtualbox" ]] && [[ -e /Applications/VirtualBox.app ]]
@@ -811,7 +982,7 @@ undo_vbox_workaround() {
 	#sudo kextload -b org.virtualbox.kext.VBoxNetAdp
 	#sudo kextload -b org.virtualbox.kext.VBoxUSB
 	
-	# open System Preferences - Privacy - General
+	# open System Settings - Privacy - General
 	# accept extensions
 	
 	}
@@ -820,104 +991,108 @@ undo_vbox_workaround() {
 
 ### affinity
 # link color profiles (needed as of 2021-03)
-# publisher
-if [[ -e "$PATH_TO_APPS"/"Affinity Publisher.app" ]]
-then
-	echo ''
-	APP_NAME_FOR_PREFERENCES="Affinity Publisher"
-	echo "$APP_NAME_FOR_PREFERENCES"
-	mkdir -p "/Users/$USER/Library/Containers/com.seriflabs.affinitypublisher/Data/Library/Application Support/profiles/"
-	if [[ -e /Library/ColorSync/Profiles/eci/ISOcoated_v2_300_eci.icc ]]
-	then
-		if [[ -e "/Users/$USER/Library/Containers/com.seriflabs.affinitypublisher/Data/Library/Application Support/profiles/ISOcoated_v2_300_eci.icc" ]]
-		then
-			echo "color profile ISOcoated_v2_300_eci for publisher already exists..."
-		else
-			ln -s /Library/ColorSync/Profiles/eci/ISOcoated_v2_300_eci.icc "/Users/$USER/Library/Containers/com.seriflabs.affinitypublisher/Data/Library/Application Support/profiles/"
-		fi
-	else
-		echo "color profile ISOcoated_v2_300_eci not found..." >&2
-	fi
-	if [[ -e /Library/ColorSync/Profiles/eci/eciRGB_v2.icc ]]
-	then
-		if [[ -e "/Users/$USER/Library/Containers/com.seriflabs.affinitypublisher/Data/Library/Application Support/profiles/eciRGB_v2.icc" ]]
-		then
-			echo "color profile eciRGB_v2 for publisher already exists..."
-		else
-			ln -s /Library/ColorSync/Profiles/eci/eciRGB_v2.icc "/Users/$USER/Library/Containers/com.seriflabs.affinitypublisher/Data/Library/Application Support/profiles/"
-		fi
-	else
-		echo "color profile eciRGB_v2 not found..." >&2
-	fi
-else
-	echo ""$PATH_TO_APPS"/"Affinity Publisher.app" not installed..." >&2
-fi
+# no longer needed for V2 apps (as of 2023-01)
 
-# photos
-if [[ -e "$PATH_TO_APPS"/"Affinity Photo.app" ]]
-then
-	echo ''
-	APP_NAME_FOR_PREFERENCES="Affinity Photo"
-	echo "$APP_NAME_FOR_PREFERENCES"
-	mkdir -p "/Users/$USER/Library/Containers/com.seriflabs.affinityphoto/Data/Library/Application Support/profiles/"
-	if [[ -e /Library/ColorSync/Profiles/eci/ISOcoated_v2_300_eci.icc ]]
+color_profile_links_affinity_v1_apps() {
+	# publisher
+	if [[ -e "$PATH_TO_APPS"/"Affinity Publisher.app" ]]
 	then
-		if [[ -e "/Users/$USER/Library/Containers/com.seriflabs.affinityphoto/Data/Library/Application Support/profiles/ISOcoated_v2_300_eci.icc" ]]
+		echo ''
+		APP_NAME_FOR_PREFERENCES="Affinity Publisher"
+		echo "$APP_NAME_FOR_PREFERENCES"
+		mkdir -p "/Users/$USER/Library/Containers/com.seriflabs.affinitypublisher/Data/Library/Application Support/profiles/"
+		if [[ -e /Library/ColorSync/Profiles/eci/ISOcoated_v2_300_eci.icc ]]
 		then
-			echo "color profile ISOcoated_v2_300_eci for photo already exists..."
+			if [[ -e "/Users/$USER/Library/Containers/com.seriflabs.affinitypublisher/Data/Library/Application Support/profiles/ISOcoated_v2_300_eci.icc" ]]
+			then
+				echo "color profile ISOcoated_v2_300_eci for publisher already exists..."
+			else
+				ln -s /Library/ColorSync/Profiles/eci/ISOcoated_v2_300_eci.icc "/Users/$USER/Library/Containers/com.seriflabs.affinitypublisher/Data/Library/Application Support/profiles/"
+			fi
 		else
-			ln -s /Library/ColorSync/Profiles/eci/ISOcoated_v2_300_eci.icc "/Users/$USER/Library/Containers/com.seriflabs.affinityphoto/Data/Library/Application Support/profiles/"
+			echo "color profile ISOcoated_v2_300_eci not found..." >&2
+		fi
+		if [[ -e /Library/ColorSync/Profiles/eci/eciRGB_v2.icc ]]
+		then
+			if [[ -e "/Users/$USER/Library/Containers/com.seriflabs.affinitypublisher/Data/Library/Application Support/profiles/eciRGB_v2.icc" ]]
+			then
+				echo "color profile eciRGB_v2 for publisher already exists..."
+			else
+				ln -s /Library/ColorSync/Profiles/eci/eciRGB_v2.icc "/Users/$USER/Library/Containers/com.seriflabs.affinitypublisher/Data/Library/Application Support/profiles/"
+			fi
+		else
+			echo "color profile eciRGB_v2 not found..." >&2
 		fi
 	else
-		echo "color profile ISOcoated_v2_300_eci not found..." >&2
+		echo ""$PATH_TO_APPS"/"Affinity Publisher.app" not installed..." >&2
 	fi
-	if [[ -e /Library/ColorSync/Profiles/eci/eciRGB_v2.icc ]]
+	
+	# photos
+	if [[ -e "$PATH_TO_APPS"/"Affinity Photo.app" ]]
 	then
-		if [[ -e "/Users/$USER/Library/Containers/com.seriflabs.affinityphoto/Data/Library/Application Support/profiles/eciRGB_v2.icc" ]]
+		echo ''
+		APP_NAME_FOR_PREFERENCES="Affinity Photo"
+		echo "$APP_NAME_FOR_PREFERENCES"
+		mkdir -p "/Users/$USER/Library/Containers/com.seriflabs.affinityphoto/Data/Library/Application Support/profiles/"
+		if [[ -e /Library/ColorSync/Profiles/eci/ISOcoated_v2_300_eci.icc ]]
 		then
-			echo "color profile eciRGB_v2 for photo already exists..."
+			if [[ -e "/Users/$USER/Library/Containers/com.seriflabs.affinityphoto/Data/Library/Application Support/profiles/ISOcoated_v2_300_eci.icc" ]]
+			then
+				echo "color profile ISOcoated_v2_300_eci for photo already exists..."
+			else
+				ln -s /Library/ColorSync/Profiles/eci/ISOcoated_v2_300_eci.icc "/Users/$USER/Library/Containers/com.seriflabs.affinityphoto/Data/Library/Application Support/profiles/"
+			fi
 		else
-			ln -s /Library/ColorSync/Profiles/eci/eciRGB_v2.icc "/Users/$USER/Library/Containers/com.seriflabs.affinityphoto/Data/Library/Application Support/profiles/"
+			echo "color profile ISOcoated_v2_300_eci not found..." >&2
+		fi
+		if [[ -e /Library/ColorSync/Profiles/eci/eciRGB_v2.icc ]]
+		then
+			if [[ -e "/Users/$USER/Library/Containers/com.seriflabs.affinityphoto/Data/Library/Application Support/profiles/eciRGB_v2.icc" ]]
+			then
+				echo "color profile eciRGB_v2 for photo already exists..."
+			else
+				ln -s /Library/ColorSync/Profiles/eci/eciRGB_v2.icc "/Users/$USER/Library/Containers/com.seriflabs.affinityphoto/Data/Library/Application Support/profiles/"
+			fi
+		else
+			echo "color profile eciRGB_v2 not found..." >&2
 		fi
 	else
-		echo "color profile eciRGB_v2 not found..." >&2
+		echo ""$PATH_TO_APPS"/"Affinity Photo.app" not installed..." >&2
 	fi
-else
-	echo ""$PATH_TO_APPS"/"Affinity Photo.app" not installed..." >&2
-fi
-
-# designer
-if [[ -e "$PATH_TO_APPS"/"Affinity Designer.app" ]]
-then
-	echo ''
-	APP_NAME_FOR_PREFERENCES="Affinity Designer"
-	echo "$APP_NAME_FOR_PREFERENCES"
-	mkdir -p "/Users/$USER/Library/Containers/com.seriflabs.affinitydesigner/Data/Library/Application Support/profiles/"
-	if [[ -e /Library/ColorSync/Profiles/eci/ISOcoated_v2_300_eci.icc ]]
+	
+	# designer
+	if [[ -e "$PATH_TO_APPS"/"Affinity Designer.app" ]]
 	then
-		if [[ -e "/Users/$USER/Library/Containers/com.seriflabs.affinitydesigner/Data/Library/Application Support/profiles/ISOcoated_v2_300_eci.icc" ]]
+		echo ''
+		APP_NAME_FOR_PREFERENCES="Affinity Designer"
+		echo "$APP_NAME_FOR_PREFERENCES"
+		mkdir -p "/Users/$USER/Library/Containers/com.seriflabs.affinitydesigner/Data/Library/Application Support/profiles/"
+		if [[ -e /Library/ColorSync/Profiles/eci/ISOcoated_v2_300_eci.icc ]]
 		then
-			echo "color profile ISOcoated_v2_300_eci for designer already exists..."
+			if [[ -e "/Users/$USER/Library/Containers/com.seriflabs.affinitydesigner/Data/Library/Application Support/profiles/ISOcoated_v2_300_eci.icc" ]]
+			then
+				echo "color profile ISOcoated_v2_300_eci for designer already exists..."
+			else
+				ln -s /Library/ColorSync/Profiles/eci/ISOcoated_v2_300_eci.icc "/Users/$USER/Library/Containers/com.seriflabs.affinitydesigner/Data/Library/Application Support/profiles/"
+			fi
 		else
-			ln -s /Library/ColorSync/Profiles/eci/ISOcoated_v2_300_eci.icc "/Users/$USER/Library/Containers/com.seriflabs.affinitydesigner/Data/Library/Application Support/profiles/"
+			echo "color profile ISOcoated_v2_300_eci not found..." >&2
+		fi
+		if [[ -e /Library/ColorSync/Profiles/eci/eciRGB_v2.icc ]]
+		then
+			if [[ -e "/Users/$USER/Library/Containers/com.seriflabs.affinitydesigner/Data/Library/Application Support/profiles/eciRGB_v2.icc" ]]
+			then
+				echo "color profile eciRGB_v2 for designer already exists..."
+			else
+				ln -s /Library/ColorSync/Profiles/eci/eciRGB_v2.icc "/Users/$USER/Library/Containers/com.seriflabs.affinitydesigner/Data/Library/Application Support/profiles/"
+			fi
+		else
+			echo "color profile eciRGB_v2 not found..." >&2
 		fi
 	else
-		echo "color profile ISOcoated_v2_300_eci not found..." >&2
+		echo ""$PATH_TO_APPS"/"Affinity Designer.app" not installed..." >&2
 	fi
-	if [[ -e /Library/ColorSync/Profiles/eci/eciRGB_v2.icc ]]
-	then
-		if [[ -e "/Users/$USER/Library/Containers/com.seriflabs.affinitydesigner/Data/Library/Application Support/profiles/eciRGB_v2.icc" ]]
-		then
-			echo "color profile eciRGB_v2 for designer already exists..."
-		else
-			ln -s /Library/ColorSync/Profiles/eci/eciRGB_v2.icc "/Users/$USER/Library/Containers/com.seriflabs.affinitydesigner/Data/Library/Application Support/profiles/"
-		fi
-	else
-		echo "color profile eciRGB_v2 not found..." >&2
-	fi
-else
-	echo ""$PATH_TO_APPS"/"Affinity Designer.app" not installed..." >&2
-fi
+}
 
 
 ### stopping the error output redirecting

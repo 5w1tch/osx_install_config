@@ -122,6 +122,7 @@ then
 	echo "clamav-unofficial-sigs.sh is already installed, upgrading..."
 	# root would be needed here, but the installation is completely homebrew and root free
 	#clamav-unofficial-sigs.sh --upgrade
+	#FRESH_INSTALL="yes"
 else
 	# not installed
 	echo "installing clamav-unofficial-sigs.sh..."
@@ -145,9 +146,20 @@ if [[ $? -eq 0 ]]; then echo "successfully downloaded "$DOWNLOAD_FILE"..."; else
 
 # configuration
 echo "unofficial sigs configuration..."
+mkdir -p ""$HOMEBREW_PATH"/var/homebrew/linked/clamav/share/clamav"
+chown "$USER":admin ""$HOMEBREW_PATH"/var/homebrew/linked/clamav/share/clamav"
+chmod 755 ""$HOMEBREW_PATH"/var/homebrew/linked/clamav/share/clamav"
 sed -i '' 's|^clam_dbs=.*|clam_dbs="'"$HOMEBREW_PATH"'/var/homebrew/linked/clamav/share/clamav"|g' "$HOMEBREW_PATH"/etc/clamav-unofficial-sigs/os.conf
 sed -i '' 's|^work_dir=.*|work_dir="'"$HOMEBREW_PATH"'/var/db/clamav-unofficial-sigs"|g' "$HOMEBREW_PATH"/etc/clamav-unofficial-sigs/os.conf
 sed -i '' 's|^log_file_path=.*|log_file_path="'"$HOMEBREW_PATH"'/var/log"|g' "$HOMEBREW_PATH"/etc/clamav-unofficial-sigs/os.conf
+
+# workaround for issue
+# https://github.com/extremeshok/clamav-unofficial-sigs/issues/417
+sed -i '' 's|^if \[ \-f \"\/etc\/clamav-unofficial-sigs\/master.conf\" \] \; then$|if \[ -f "'"$HOMEBREW_PATH"'\/etc\/clamav-unofficial-sigs\/master.conf\" \] \; then|g' "$HOMEBREW_BIN_PATH"/clamav-unofficial-sigs.sh
+sed -i '' 's|^  config_dir\=\"\/etc\/clamav-unofficial-sigs\"$|  config_dir\="'"$HOMEBREW_PATH"'\/etc\/clamav-unofficial-sigs\"|g' "$HOMEBREW_BIN_PATH"/clamav-unofficial-sigs.sh
+sed -i '' '/#\ clamscan_bin/a \
+clamscan_bin="'"$HOMEBREW_PATH"'\/bin/clamscan"\
+' "$HOMEBREW_BIN_PATH"/clamav-unofficial-sigs.sh
 
 # fixing LinuxMalwareDetect Database File Updates
 # tar: Option --wildcards is not supported
@@ -181,7 +193,7 @@ if [[ "$FRESH_INSTALL" == "yes" ]]
 then
 	clamav-unofficial-sigs.sh --force
 else
-	clamav-unofficial-sigs.sh
+	clamscan_bin="/opt/homebrew/bin/clamscan" clamav-unofficial-sigs.sh
 fi
 
 
@@ -203,7 +215,7 @@ then
 	do
 	    sleep 1
 	done
-	sleep 5
+	sleep 10
 else
 	echo "clamd is already running..."
 fi
@@ -237,14 +249,24 @@ echo ''
 ### documentation
 ### uninstall
 uninstalling() {
+if command -v brew &> /dev/null
+then
+    # installed
+    BREW_PATH_PREFIX=$(brew --prefix)
+else
+    # not installed
+    echo "homebrew is not installed, exiting..."
+    echo ''
+    exit
+fi
 brew uninstall clamav
-rm -rf "/usr/local/etc/clamav"
-rm -rf "/usr/local/bin/clamav-unofficial-sigs.sh"
-rm -rf "/usr/local/var/db/clamav-unofficial-sigs"
-rm -rf "/usr/local/var/run/clamav"
-rm -rf "/usr/local/opt/clamav"
-rm -rf "/usr/local/etc/clamav-unofficial-sigs"
-rm -rf "/usr/local/var/log/clamav-unofficial-sigs.log"
+rm -rf ""$BREW_PATH_PREFIX"/etc/clamav"
+rm -rf ""$BREW_PATH_PREFIX"/bin/clamav-unofficial-sigs.sh"
+rm -rf ""$BREW_PATH_PREFIX"/var/db/clamav-unofficial-sigs"
+rm -rf ""$BREW_PATH_PREFIX"/var/run/clamav"
+rm -rf ""$BREW_PATH_PREFIX"/opt/clamav"
+rm -rf ""$BREW_PATH_PREFIX"/etc/clamav-unofficial-sigs"
+rm -rf ""$BREW_PATH_PREFIX"/var/log/clamav-unofficial-sigs.log"
 #dscl . list /Users UniqueID | tr -s ' ' | sort -n -t ' ' -k2,2 | grep clamav
 #dscl . list /Groups PrimaryGroupID | tr -s ' ' | sort -n -t ' ' -k2,2 | grep clamav
 #sudo -v

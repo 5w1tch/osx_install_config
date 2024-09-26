@@ -22,7 +22,11 @@ SCRIPT_INSTALL_NAME=example_root
 ### functions
 wait_for_loggedinuser() {
     ### waiting for logged in user
-    loggedInUser=$(/usr/bin/python -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+    # recommended way, but it seems apple deprecated python2 in macOS 12.3.0
+    # to keep on using the python command, a python module is needed
+    #pip3 install pyobjc-framework-SystemConfiguration
+    #loggedInUser=$(python3 -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+    loggedInUser=$(scutil <<< "show State:/Users/ConsoleUser" | awk '/Name :/ && ! /loginwindow/ { print $3 }')
     NUM=0
     MAX_NUM=30
     SLEEP_TIME=3
@@ -31,7 +35,11 @@ wait_for_loggedinuser() {
     do
         sleep "$SLEEP_TIME"
         NUM=$((NUM+1))
-        loggedInUser=$(/usr/bin/python -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+        # recommended way, but it seems apple deprecated python2 in macOS 12.3.0
+        # to keep on using the python command, a python module is needed
+        #pip3 install pyobjc-framework-SystemConfiguration
+        #loggedInUser=$(python3 -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+        loggedInUser=$(scutil <<< "show State:/Users/ConsoleUser" | awk '/Name :/ && ! /loginwindow/ { print $3 }')
     done
     #echo ''
     #echo "NUM is $NUM..."
@@ -214,22 +222,29 @@ wait_for_network_select() {
 }
 
 setting_config() {
+    echo ''
     ### sourcing .$SHELLrc or setting PATH
     # as the script is run from a launchd it would not detect the binary commands and would fail checking if binaries are installed
     # needed if binary is installed in a special directory
-    if [[ -n "$BASH_SOURCE" ]] && [[ -e /Users/"$loggedInUser"/.bashrc ]] && [[ $(cat /Users/"$loggedInUser"/.bashrc | grep 'PATH=.*/usr/local/bin:') != "" ]]
+    if [[ -n "$BASH_SOURCE" ]] && [[ -e /Users/"$loggedInUser"/.bashrc ]] && [[ $(cat /Users/"$loggedInUser"/.bashrc | grep 'export PATH=.*:$PATH"') != "" ]]
     then
         echo "sourcing .bashrc..."
-        . /Users/"$loggedInUser"/.bashrc
-    elif [[ -n "$ZSH_VERSION" ]] && [[ -e /Users/"$loggedInUser"/.zshrc ]] && [[ $(cat /Users/"$loggedInUser"/.zshrc | grep 'PATH=.*/usr/local/bin:') != "" ]]
+        #. /Users/"$loggedInUser"/.bashrc
+        # avoiding oh-my-zsh errors for root by only sourcing export PATH
+        source <(sed -n '/^export\ PATH\=/p' /Users/"$loggedInUser"/.bashrc)
+    elif [[ -n "$ZSH_VERSION" ]] && [[ -e /Users/"$loggedInUser"/.zshrc ]] && [[ $(cat /Users/"$loggedInUser"/.zshrc | grep 'export PATH=.*:$PATH"') != "" ]]
     then
         echo "sourcing .zshrc..."
         ZSH_DISABLE_COMPFIX="true"
-        . /Users/"$loggedInUser"/.zshrc
+        #. /Users/"$loggedInUser"/.zshrc
+        # avoiding oh-my-zsh errors for root by only sourcing export PATH
+        source <(sed -n '/^export\ PATH\=/p' /Users/"$loggedInUser"/.zshrc)
     else
-        echo "setting path for script..."
-        export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
+        echo "PATH was not set continuing with default value..."
     fi
+    echo "using PATH..." 
+    echo "$PATH"
+    echo ''
 }
 
 
@@ -243,9 +258,10 @@ if [[ "$RUN_FROM_BATCH_SCRIPT" == "yes" ]]; then env_start_error_log; else start
 #wait_for_network_select
 #wait_for_getting_online
 # run before main function, e.g. for time format
-setting_config &> /dev/null
 
 example_function() {
+
+    setting_config
     
     ### loggedInUser
     echo "loggedInUser is $loggedInUser..."
